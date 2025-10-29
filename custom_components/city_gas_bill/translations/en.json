@@ -1,0 +1,54 @@
+{
+  "title": "City Gas Bill",
+  "config": {
+    "step": {
+      "user": {
+        "title": "City Gas Bill Setup",
+        "description": "Please select your gas provider, gas meter sensor, and the monthly reading day.",
+        "data": {
+          "provider": "Gas Provider",
+          "gas_sensor": "Gas Usage Sensor (m³)",
+          "reading_day": "Monthly Reading Day (0 = Last day of month)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "An instance of City Gas Bill is already configured. Only one is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Modify City Gas Bill Settings",
+        "description": "Change the provider, gas sensor, or the monthly reading day used for bill calculation.",
+        "data": {
+          "provider": "Gas Provider",
+          "gas_sensor": "Gas Usage Sensor (m³)",
+          "reading_day": "Monthly Reading Day (0 = Last day of month)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "update_data": { "name": "Sync Data Now" }
+    },
+    "sensor": {
+      "monthly_gas_usage": { "name": "Monthly Gas Usage" },
+      "total_bill": { "name": "Total Bill" },
+      "estimated_monthly_usage": { "name": "Estimated Monthly Usage" },
+      "estimated_total_bill": { "name": "Estimated Total Bill" },
+      "previous_month_total_bill": { "name": "Previous Month Total Bill" },
+      "last_update_time": { "name": "Last Successful Sync" }
+    },
+    "number": {
+      "base_fee": { "name": "Base Fee" },
+      "monthly_start_reading": { "name": "Monthly Start Reading" },
+      "prev_month_heat": { "name": "Previous Month Average Heat" },
+      "curr_month_heat": { "name": "Current Month Average Heat" },
+      "prev_month_price": { "name": "Previous Month Unit Price" },
+      "curr_month_price": { "name": "Current Month Unit Price" },
+      "correction_factor": { "name": "Temp/Pressure Correction Factor" }
+    }
+  }
+}

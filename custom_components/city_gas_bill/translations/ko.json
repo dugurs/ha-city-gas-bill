@@ -1,0 +1,54 @@
+{
+  "title": "도시가스 요금",
+  "config": {
+    "step": {
+      "user": {
+        "title": "도시가스 요금 설정",
+        "description": "요금 계산을 위한 도시가스 공급사, 가스 계량기 센서, 월 정기 검침일을 선택해주세요.",
+        "data": {
+          "provider": "도시가스 공급사",
+          "gas_sensor": "가스 사용량 센서 (m³)",
+          "reading_day": "월 정기 검침일 (0 = 말일)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "이미 설정된 도시가스 요금 통합구성요소가 있습니다. 하나만 추가할 수 있습니다."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "도시가스 요금 설정 수정",
+        "description": "요금 계산에 사용될 공급사, 가스 센서 또는 월 정기 검침일을 변경합니다.",
+        "data": {
+          "provider": "도시가스 공급사",
+          "gas_sensor": "가스 사용량 센서 (m³)",
+          "reading_day": "월 정기 검침일 (0 = 말일)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "update_data": { "name": "데이터 갱신" }
+    },
+    "sensor": {
+      "monthly_gas_usage": { "name": "월 가스 사용량" },
+      "total_bill": { "name": "총 사용요금" },
+      "estimated_monthly_usage": { "name": "월 예상 사용량" },
+      "estimated_total_bill": { "name": "월 예상 요금" },
+      "previous_month_total_bill": { "name": "전월 총 사용요금" },
+      "last_update_time": { "name": "마지막 동기화 성공" }
+    },
+    "number": {
+      "base_fee": { "name": "기본요금" },
+      "monthly_start_reading": { "name": "월검침시작값" },
+      "prev_month_heat": { "name": "전월 평균열량" },
+      "curr_month_heat": { "name": "당월 평균열량" },
+      "prev_month_price": { "name": "전월 열량단가" },
+      "curr_month_price": { "name": "당월 열량단가" },
+      "correction_factor": { "name": "온압보정계수" }
+    }
+  }
+}
