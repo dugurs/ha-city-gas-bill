@@ -4,11 +4,12 @@
     "step": {
       "user": {
         "title": "도시가스 요금 설정",
-        "description": "요금 계산을 위한 도시가스 공급사, 가스 계량기 센서, 월 정기 검침일을 선택해주세요.",
+        "description": "요금 계산을 위한 도시가스 공급사, 가스 계량기 센서, 월 정기 검침일 등을 선택해주세요.",
         "data": {
           "provider": "도시가스 공급사",
           "gas_sensor": "가스 사용량 센서 (m³)",
-          "reading_day": "월 정기 검침일 (0 = 말일)"
+          "reading_day": "월 정기 검침일 (0 = 말일)",
+          "bimonthly_cycle": "검침 주기"
         }
       }
     },
@@ -20,11 +21,12 @@
     "step": {
       "init": {
         "title": "도시가스 요금 설정 수정",
-        "description": "요금 계산에 사용될 공급사, 가스 센서 또는 월 정기 검침일을 변경합니다.",
+        "description": "요금 계산에 사용될 공급사, 가스 센서 또는 검침 주기 등을 변경합니다.",
         "data": {
           "provider": "도시가스 공급사",
           "gas_sensor": "가스 사용량 센서 (m³)",
-          "reading_day": "월 정기 검침일 (0 = 말일)"
+          "reading_day": "월 정기 검침일 (0 = 말일)",
+          "bimonthly_cycle": "검침 주기"
         }
       }
     }
@@ -35,14 +37,19 @@
     },
     "sensor": {
       "monthly_gas_usage": { "name": "월 가스 사용량" },
-      "total_bill": { "name": "총 사용요금" },
+      "total_bill": { "name": "월 사용 요금" },
       "estimated_monthly_usage": { "name": "월 예상 사용량" },
       "estimated_total_bill": { "name": "월 예상 요금" },
-      "previous_month_total_bill": { "name": "전월 총 사용요금" },
-      "last_update_time": { "name": "마지막 동기화 성공" }
+      "previous_month_total_bill": { "name": "전월 사용 요금" },
+      "last_update_time": { "name": "마지막 동기화 성공" },
+      "bimonthly_usage": { "name": "격월 가스 사용량" },
+      "bimonthly_bill": { "name": "격월 사용 요금" },
+      "bimonthly_previous_bill": { "name": "격월 직전 사용 요금" },
+      "bimonthly_estimated_usage": { "name": "격월 예상 사용량" },
+      "bimonthly_estimated_bill": { "name": "격월 예상 요금" }
     },
     "number": {
-      "base_fee": { "name": "기본요금" },
+      "base_fee": { "name": "기본 요금" },
       "monthly_start_reading": { "name": "월검침시작값" },
       "prev_month_heat": { "name": "전월 평균열량" },
       "curr_month_heat": { "name": "당월 평균열량" },

@@ -7,20 +7,20 @@ City Gas Bill 통합구성요소의 설정 흐름(Config Flow)을 처리하는 �
 from __future__ import annotations
 from typing import Any
 
-import voluptuous as vol  # 데이터 유효성 검증을 위한 라이브-러리
+import voluptuous as vol  # 데이터 유효성 검증을 위한 라이브러리
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow, ConfigEntry
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
 
-from .const import DOMAIN, CONF_PROVIDER, CONF_GAS_SENSOR, CONF_READING_DAY
+from .const import DOMAIN, CONF_PROVIDER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_BIMONTHLY_CYCLE
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
 def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
     """
     사용자에게 보여줄 설정 폼의 스키마(구조)를 생성하는 헬퍼 함수입니다.
-    최초 설정과 옵션 변경 시에 모두 재사용됩니다.
+    이 함수는 최초 설정과 옵션 변경 시에 모두 재사용되어 코드 중복을 줄입니다.
     """
     if current_config is None:
         current_config = {}
@@ -34,6 +34,15 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         ],
         key=lambda item: item["label"], # 가나다 순으로 정렬
     )
+
+    # '검침 주기' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
+    # label: 사용자에게 보여지는 텍스트
+    # value: 코드 내부에서 사용되는 값 ('disabled', 'odd', 'even')
+    bimonthly_cycle_options = [
+        SelectOptionDict(value="disabled", label="매월"),
+        SelectOptionDict(value="odd", label="격월 - 홀수월"),
+        SelectOptionDict(value="even", label="격월 - 짝수월"),
+    ]
 
     # voluptuous를 사용하여 설정 폼의 각 필드를 정의합니다.
     return vol.Schema({
@@ -66,6 +75,18 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
             ),
             vol.Coerce(int) # 입력된 값을 정수(int) 타입으로 변환
         ),
+        # '검침 주기' 필드 (드롭다운 메뉴)
+        vol.Required(
+            CONF_BIMONTHLY_CYCLE,
+            default=current_config.get(CONF_BIMONTHLY_CYCLE, "disabled"), # 기본값은 '매월'
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=bimonthly_cycle_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                # 번역 파일(ko.json 등)에서 이 필드의 라벨("검침 주기")을 찾아 UI에 표시합니다.
+                translation_key=CONF_BIMONTHLY_CYCLE 
+            )
+        ),
     })
 
 class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -77,7 +98,10 @@ class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Config Flow와 Options Flow를 연결하는 메소드입니다."""
+        """
+        Config Flow와 Options Flow를 연결하는 메소드입니다.
+        HA가 '구성' 버튼을 눌렀을 때 Options Flow를 찾을 수 있도록 해줍니다.
+        """
         return CityGasBillOptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

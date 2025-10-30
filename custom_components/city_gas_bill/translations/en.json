@@ -4,11 +4,12 @@
     "step": {
       "user": {
         "title": "City Gas Bill Setup",
-        "description": "Please select your gas provider, gas meter sensor, and the monthly reading day.",
+        "description": "Please select your gas provider, meter sensor, reading day, and billing cycle.",
         "data": {
           "provider": "Gas Provider",
           "gas_sensor": "Gas Usage Sensor (m³)",
-          "reading_day": "Monthly Reading Day (0 = Last day of month)"
+          "reading_day": "Monthly Reading Day (0 = Last day)",
+          "bimonthly_cycle": "Billing Cycle"
         }
       }
     },
@@ -20,11 +21,12 @@
     "step": {
       "init": {
         "title": "Modify City Gas Bill Settings",
-        "description": "Change the provider, gas sensor, or the monthly reading day used for bill calculation.",
+        "description": "Change the provider, gas sensor, or billing cycle used for calculation.",
         "data": {
           "provider": "Gas Provider",
           "gas_sensor": "Gas Usage Sensor (m³)",
-          "reading_day": "Monthly Reading Day (0 = Last day of month)"
+          "reading_day": "Monthly Reading Day (0 = Last day)",
+          "bimonthly_cycle": "Billing Cycle"
         }
       }
     }
@@ -39,7 +41,12 @@
       "estimated_monthly_usage": { "name": "Estimated Monthly Usage" },
       "estimated_total_bill": { "name": "Estimated Total Bill" },
       "previous_month_total_bill": { "name": "Previous Month Total Bill" },
-      "last_update_time": { "name": "Last Successful Sync" }
+      "last_update_time": { "name": "Last Successful Sync" },
+      "bimonthly_usage": { "name": "Bimonthly Gas Usage" },
+      "bimonthly_bill": { "name": "Bimonthly Total Bill" },
+      "bimonthly_previous_bill": { "name": "Bimonthly Previous Total Bill" },
+      "bimonthly_estimated_usage": { "name": "Bimonthly Estimated Usage" },
+      "bimonthly_estimated_bill": { "name": "Bimonthly Estimated Bill" }
     },
     "number": {
       "base_fee": { "name": "Base Fee" },

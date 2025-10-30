@@ -34,7 +34,7 @@ PLATFORMS: Final = [SENSOR, NUMBER, BUTTON]
 CONF_PROVIDER: Final = "provider"          # 도시가스 공급사
 CONF_GAS_SENSOR: Final = "gas_sensor"      # 가스 계량기 센서 엔티티 ID
 CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
-
+CONF_BIMONTHLY_CYCLE: Final = "bimonthly_cycle" # 격월 요금 기능을 위한 '검침 주기' 설정 키입니다.
 
 # --- 기본값 ---
 
@@ -59,7 +59,7 @@ ATTR_END_DATE: Final = "end_date"            # 현재 날짜 (계산 기준일)
 ATTR_DAYS_TOTAL: Final = "total_days"          # 총 사용일수
 ATTR_DAYS_PREV_MONTH: Final = "prev_month_days"  # 총 사용일수 중 전월에 해당하는 일수
 ATTR_DAYS_CURR_MONTH: Final = "curr_month_days"  # 총 사용일수 중 당월에 해당하는 일수
-
+ATTR_MONTHLY_GAS_USAGE: Final = "monthly_gas_usage" # 격월 센서가 '전월 총 사용요금'의 속성에서 전월 사용량 값을 가져올 때 사용하는 키
 
 # --- 이벤트 이름 ---
 
