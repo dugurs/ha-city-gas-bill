@@ -1,3 +1,4 @@
 /.history/
 /doc/
+/__pycache__/
 *.pyc

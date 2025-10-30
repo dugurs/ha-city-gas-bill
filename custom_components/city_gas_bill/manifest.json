@@ -1,12 +1,12 @@
 {
-    "domain": "city_gas_bill",
-    "name": "City Gas Bill",
-    "config_flow": true,
-    "documentation": "https://github.com/dugurs/ha-city-gas-bill",
-    "issue_tracker": "https://github.com/dugurs/ha-city-gas-bill/issues",
-    "codeowners": ["@dugurs"],
-    "requirements": ["aiohttp", "beautifulsoup4", "python-dateutil"],
-    "version": "1.0.0",
-    "iot_class": "cloud_polling",
-    "core_config_version": "2025.10"
-  }
+  "domain": "city_gas_bill",
+  "name": "City Gas Bill",
+  "config_flow": true,
+  "documentation": "https://github.com/dugurs/ha-city-gas-bill",
+  "issue_tracker": "https://github.com/dugurs/ha-city-gas-bill/issues",
+  "codeowners": ["@dugurs"],
+  "requirements": ["aiohttp", "beautifulsoup4", "python-dateutil"],
+  "version": "1.0.1",
+  "iot_class": "cloud_polling",
+  "core_config_version": "2025.10"
+}

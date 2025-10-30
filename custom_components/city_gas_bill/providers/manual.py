@@ -1,25 +1,42 @@
 # custom_components/city_gas_bill/providers/manual.py
 
-"""A non-scraping provider for manual data entry."""
+"""
+웹 스크래핑을 하지 않고, 사용자가 직접 데이터를 입력할 수 있도록 지원하는
+'수동 입력' 공급사입니다.
+"""
 from __future__ import annotations
 
-from .base import GasProvider
+from .base import GasProvider  # 모든 공급사의 부모 클래스
 
 class ManualProvider(GasProvider):
-    """Provider for users who want to manage heat and price data manually."""
+    """
+    사용자가 직접 평균열량 및 열량단가 데이터를 관리하고자 할 때 사용하는 공급사 클래스입니다.
+    """
 
     @property
     def id(self) -> str:
+        """공급사 고유 ID를 반환합니다."""
         return "manual"
 
     @property
     def name(self) -> str:
+        """UI 설정 화면에 표시될 이름을 반환합니다."""
         return "수동 입력 (직접 관리)"
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
-        """Do not scrape, return None to keep existing values."""
+        """
+        평균열량 데이터를 스크래핑하지 않습니다.
+        
+        항상 None을 반환하여, 코디네이터가 사용자가 수동으로 입력한
+        Number 엔티티의 값을 덮어쓰지 않도록 합니다.
+        """
         return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
-        """Do not scrape, return None to keep existing values."""
+        """
+        열량단가 데이터를 스크래핑하지 않습니다.
+        
+        항상 None을 반환하여, 코디네이터가 사용자가 수동으로 입력한
+        Number 엔티티의 값을 덮어쓰지 않도록 합니다.
+        """
         return None
