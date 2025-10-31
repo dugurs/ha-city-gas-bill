@@ -14,7 +14,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
 
-from .const import DOMAIN, CONF_PROVIDER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_BIMONTHLY_CYCLE
+from .const import DOMAIN, CONF_PROVIDER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
 def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
@@ -75,6 +75,11 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
             ),
             vol.Coerce(int) # 입력된 값을 정수(int) 타입으로 변환
         ),
+        # '정기 검침시간' 필드 (시간 선택자)
+        vol.Required(
+            CONF_READING_TIME,
+            default=current_config.get(CONF_READING_TIME, "00:00"),
+        ): selector.TimeSelector(),
         # '검침 주기' 필드 (드롭다운 메뉴)
         vol.Required(
             CONF_BIMONTHLY_CYCLE,

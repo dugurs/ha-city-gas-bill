@@ -34,6 +34,7 @@ PLATFORMS: Final = [SENSOR, NUMBER, BUTTON]
 CONF_PROVIDER: Final = "provider"          # 도시가스 공급사
 CONF_GAS_SENSOR: Final = "gas_sensor"      # 가스 계량기 센서 엔티티 ID
 CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
+CONF_READING_TIME: Final = "reading_time"  # 일일 정기 검침시간 (HH:MM)
 CONF_BIMONTHLY_CYCLE: Final = "bimonthly_cycle" # 격월 요금 기능을 위한 '검침 주기' 설정 키입니다.
 
 # --- 기본값 ---

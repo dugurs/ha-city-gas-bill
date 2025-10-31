@@ -9,6 +9,7 @@
           "provider": "Gas Provider",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
+          "reading_time": "Daily Reading Time (HH:MM)",
           "bimonthly_cycle": "Billing Cycle"
         }
       }
@@ -26,6 +27,7 @@
           "provider": "Gas Provider",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
+          "reading_time": "Daily Reading Time (HH:MM)",
           "bimonthly_cycle": "Billing Cycle"
         }
       }

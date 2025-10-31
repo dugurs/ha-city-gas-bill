@@ -9,6 +9,7 @@
           "provider": "도시가스 공급사",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
+          "reading_time": "일일 정기 검침시간 (HH:MM)",
           "bimonthly_cycle": "검침 주기"
         }
       }
@@ -26,6 +27,7 @@
           "provider": "도시가스 공급사",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
+          "reading_time": "월 정기 검침시간 (HH:MM)",
           "bimonthly_cycle": "검침 주기"
         }
       }
