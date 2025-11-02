@@ -66,6 +66,7 @@ class GasBillCalculator:
         prev_price: float,
         curr_price: float,
         today: date,
+        reduction: float = 0.0,
     ) -> tuple[int, dict]:
         """보정된 월사용량과 요율 정보를 바탕으로 총요금과 속성을 계산합니다.
 
@@ -89,7 +90,27 @@ class GasBillCalculator:
         curr_usage = corrected_usage * (curr_days / total_days)
         prev_fee = prev_usage * prev_heat * prev_price
         curr_fee = curr_usage * curr_heat * curr_price
-        total_fee = round((base_fee + prev_fee + curr_fee) * 1.1)
+
+        # 전월/당월 각각의 경감액 계산 (일할 비율 적용)
+        reduction_value = reduction if reduction and reduction > 0 else 0.0
+        prev_reduction = (reduction_value * prev_days / total_days) if prev_days > 0 else 0.0
+        curr_reduction = (reduction_value * curr_days / total_days) if curr_days > 0 else 0.0
+        
+        # 각 월의 경감액은 해당 월의 요금을 초과할 수 없음
+        effective_prev_reduction = min(prev_reduction, prev_fee)
+        effective_curr_reduction = min(curr_reduction, curr_fee)
+        
+        # 전체 사용요금과 적용된 경감액 합계
+        usage_fee = prev_fee + curr_fee
+        effective_reduction = effective_prev_reduction + effective_curr_reduction
+
+        # 최종 요금은 10원 이점 버림을 적용합니다.
+        import math
+        raw_total = (base_fee + (usage_fee - effective_reduction)) * 1.1
+        if raw_total < 0:
+            raw_total = 0.0
+        # 10원 이하 버림: ex) 12345.9 -> 12340
+        total_fee = int(math.floor(raw_total / 10.0) * 10)
         attrs = {
             "start_date": start_of_period.isoformat(),
             "end_date": today.isoformat(),
@@ -98,6 +119,13 @@ class GasBillCalculator:
             "days_curr_month": curr_days,
             "prev_month_calculated_fee": round(prev_fee),
             "curr_month_calculated_fee": round(curr_fee),
+            "usage_fee": round(usage_fee),
+            "reduction_requested": round(reduction_value),
+            "prev_month_reduction": round(prev_reduction),
+            "curr_month_reduction": round(curr_reduction),
+            "prev_month_reduction_applied": round(effective_prev_reduction),
+            "curr_month_reduction_applied": round(effective_curr_reduction),
+            "reduction_applied": round(effective_reduction),
         }
         return total_fee, attrs
 

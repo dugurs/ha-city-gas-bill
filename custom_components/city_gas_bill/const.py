@@ -61,6 +61,7 @@ ATTR_DAYS_TOTAL: Final = "total_days"          # 총 사용일수
 ATTR_DAYS_PREV_MONTH: Final = "prev_month_days"  # 총 사용일수 중 전월에 해당하는 일수
 ATTR_DAYS_CURR_MONTH: Final = "curr_month_days"  # 총 사용일수 중 당월에 해당하는 일수
 ATTR_MONTHLY_GAS_USAGE: Final = "monthly_gas_usage" # 격월 센서가 '전월 총 사용요금'의 속성에서 전월 사용량 값을 가져올 때 사용하는 키
+ATTR_MONTHLY_START_READING: Final = "monthly_start_reading" # 월 검침 시작값(현재 검침 주기의 시작 계량기 값)
 
 # --- 이벤트 이름 ---
 

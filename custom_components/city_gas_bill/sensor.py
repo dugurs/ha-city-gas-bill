@@ -26,7 +26,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from .const import (
     DOMAIN, LOGGER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME, ATTR_START_DATE, 
     ATTR_END_DATE, ATTR_DAYS_TOTAL, ATTR_DAYS_PREV_MONTH, ATTR_DAYS_CURR_MONTH,
-    EVENT_BILL_RESET, CONF_PROVIDER, ATTR_MONTHLY_GAS_USAGE, CONF_BIMONTHLY_CYCLE
+    EVENT_BILL_RESET, CONF_PROVIDER, ATTR_MONTHLY_GAS_USAGE, ATTR_MONTHLY_START_READING, CONF_BIMONTHLY_CYCLE
 )
 from .coordinator import CityGasDataUpdateCoordinator
 from .billing import GasBillCalculator
@@ -75,6 +75,8 @@ async def async_setup_entry(
         "prev_price": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_prev_month_price"),
         "curr_price": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_curr_month_price"),
         "correction_factor": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_correction_factor"),
+        "winter_reduction": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_winter_reduction"),
+        "non_winter_reduction": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_non_winter_reduction"),
     }
     
     # 의존성 주입을 위한 각 센서의 고유 ID 정의
@@ -163,7 +165,18 @@ class TotalBillSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         entities_to_track = [self._gas_sensor_id] + [eid for eid in self._number_ids.values() if eid is not None]
-        if not all(self._number_ids.values()): return
+        # require only core number entities to be present; seasonal reduction numbers are optional
+        required_keys = [
+            "start_reading",
+            "base_fee",
+            "prev_heat",
+            "curr_heat",
+            "prev_price",
+            "curr_price",
+            "correction_factor",
+        ]
+        if not all(self._number_ids.get(k) for k in required_keys):
+            return
         self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
     @callback
@@ -204,6 +217,29 @@ class TotalBillSensor(SensorEntity):
                     monthly_usage_int = int(monthly_usage_raw)
                     corrected_usage_int = monthly_usage_int * correction_factor
                     calculator = GasBillCalculator(reading_day_config)
+                    # 경감액을 가져와서 해당 월에 맞는 값을 사용
+                    winter_id = self._number_ids.get("winter_reduction")
+                    nonwinter_id = self._number_ids.get("non_winter_reduction")
+                    winter_val = 0.0
+                    nonwinter_val = 0.0
+                    if winter_id:
+                        try:
+                            st = self.hass.states.get(winter_id)
+                            if st and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                                winter_val = max(0.0, float(st.state))
+                        except (ValueError, TypeError):
+                            winter_val = 0.0
+                    if nonwinter_id:
+                        try:
+                            st = self.hass.states.get(nonwinter_id)
+                            if st and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                                nonwinter_val = max(0.0, float(st.state))
+                        except (ValueError, TypeError):
+                            nonwinter_val = 0.0
+
+                    # 현재 월이 동절기(12~3월)인지 확인하여 해당하는 경감액 사용
+                    reduction_value = winter_val if today.month in (12, 1, 2, 3) else nonwinter_val
+
                     total_fee_int, attrs_int = calculator.compute_total_bill_from_usage(
                         corrected_usage=corrected_usage_int,
                         base_fee=base_fee,
@@ -212,6 +248,7 @@ class TotalBillSensor(SensorEntity):
                         prev_price=prev_price,
                         curr_price=curr_price,
                         today=today,
+                        reduction=reduction_value,
                     )
                     event_state = total_fee_int
                     event_attrs = {
@@ -221,11 +258,18 @@ class TotalBillSensor(SensorEntity):
                         ATTR_DAYS_PREV_MONTH: attrs_int.get("days_prev_month", 0),
                         ATTR_DAYS_CURR_MONTH: attrs_int.get("days_curr_month", 0),
                         "base_fee": base_fee,
+                        ATTR_MONTHLY_START_READING: start_reading_val,
                         ATTR_MONTHLY_GAS_USAGE: monthly_usage_int,
                         "correction_factor": correction_factor,
                         "corrected_monthly_usage": round(corrected_usage_int, 2),
                         "prev_month_calculated_fee": attrs_int.get("prev_month_calculated_fee"),
                         "curr_month_calculated_fee": attrs_int.get("curr_month_calculated_fee"),
+                        "usage_fee": attrs_int.get("usage_fee"),
+                        "prev_month_reduction": attrs_int.get("prev_month_reduction"),
+                        "curr_month_reduction": attrs_int.get("curr_month_reduction"),
+                        "prev_month_reduction_applied": attrs_int.get("prev_month_reduction_applied"),
+                        "curr_month_reduction_applied": attrs_int.get("curr_month_reduction_applied"),
+                        "reduction_applied": attrs_int.get("reduction_applied"),
                     }
             except (ValueError, TypeError, KeyError, AttributeError):
                 LOGGER.debug("정수 사용량 기반 전월요금 재계산에 실패하여 기존 값을 사용합니다.")
@@ -242,7 +286,17 @@ class TotalBillSensor(SensorEntity):
                 except (ValueError, TypeError): LOGGER.error("가스 센서 값을 읽을 수 없어 시작값 리셋에 실패했습니다.")
     async def _calculate_bill(self) -> None:
         await self._check_and_reset_on_reading_day()
-        if not all(self._number_ids.values()): self._attr_native_value = None; return
+        required_keys = [
+            "start_reading",
+            "base_fee",
+            "prev_heat",
+            "curr_heat",
+            "prev_price",
+            "curr_price",
+            "correction_factor",
+        ]
+        if not all(self._number_ids.get(k) for k in required_keys):
+            self._attr_native_value = None; return
         try:
             current_reading = float(self.hass.states.get(self._gas_sensor_id).state)
             start_reading = float(self.hass.states.get(self._number_ids["start_reading"]).state)
@@ -259,6 +313,29 @@ class TotalBillSensor(SensorEntity):
         corrected_monthly_usage = monthly_usage * correction_factor
         today = date.today()
         calculator = GasBillCalculator(self._config[CONF_READING_DAY])
+        # 경감액을 가져와서 해당 월에 맞는 값을 사용
+        winter_id = self._number_ids.get("winter_reduction")
+        nonwinter_id = self._number_ids.get("non_winter_reduction")
+        winter_val = 0.0
+        nonwinter_val = 0.0
+        if winter_id:
+            try:
+                st = self.hass.states.get(winter_id)
+                if st and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                    winter_val = max(0.0, float(st.state))
+            except (ValueError, TypeError):
+                winter_val = 0.0
+        if nonwinter_id:
+            try:
+                st = self.hass.states.get(nonwinter_id)
+                if st and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                    nonwinter_val = max(0.0, float(st.state))
+            except (ValueError, TypeError):
+                nonwinter_val = 0.0
+
+        # 현재 월이 동절기(12~3월)인지 확인하여 해당하는 경감액 사용
+        reduction_value = winter_val if today.month in (12, 1, 2, 3) else nonwinter_val
+
         total_fee, attrs = calculator.compute_total_bill_from_usage(
             corrected_usage=corrected_monthly_usage,
             base_fee=base_fee,
@@ -267,6 +344,7 @@ class TotalBillSensor(SensorEntity):
             prev_price=prev_price,
             curr_price=curr_price,
             today=today,
+            reduction=reduction_value,
         )
         self._attr_native_value = total_fee
         # 기존 속성 키를 유지하기 위해 매핑 보강
@@ -277,11 +355,18 @@ class TotalBillSensor(SensorEntity):
             ATTR_DAYS_PREV_MONTH: attrs.get("days_prev_month", 0),
             ATTR_DAYS_CURR_MONTH: attrs.get("days_curr_month", 0),
             "base_fee": base_fee,
+            ATTR_MONTHLY_START_READING: start_reading,
             ATTR_MONTHLY_GAS_USAGE: int(monthly_usage),
             "correction_factor": correction_factor,
             "corrected_monthly_usage": round(corrected_monthly_usage, 2),
             "prev_month_calculated_fee": attrs.get("prev_month_calculated_fee"),
             "curr_month_calculated_fee": attrs.get("curr_month_calculated_fee"),
+            "usage_fee": attrs.get("usage_fee"),
+            "prev_month_reduction": attrs.get("prev_month_reduction"),
+            "curr_month_reduction": attrs.get("curr_month_reduction"),
+            "prev_month_reduction_applied": attrs.get("prev_month_reduction_applied"),
+            "curr_month_reduction_applied": attrs.get("curr_month_reduction_applied"),
+            "reduction_applied": attrs.get("reduction_applied"),
         }
 
 class EstimatedUsageSensor(SensorEntity):
@@ -356,13 +441,33 @@ class EstimatedBillSensor(SensorEntity):
         ent_reg = er.async_get(self.hass)
         self._estimated_usage_id = ent_reg.async_get_entity_id("sensor", DOMAIN, self._estimated_usage_unique_id)
         entities_to_track = [self._estimated_usage_id] + [eid for eid in self._number_ids.values() if eid is not None]
-        if not all(self._number_ids.values()) or not self._estimated_usage_id: return
+        required_keys = [
+            "start_reading",
+            "base_fee",
+            "prev_heat",
+            "curr_heat",
+            "prev_price",
+            "curr_price",
+            "correction_factor",
+        ]
+        if not all(self._number_ids.get(k) for k in required_keys) or not self._estimated_usage_id:
+            return
         self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
     async def async_update(self) -> None:
-        if not all(self._number_ids.values()) or not self._estimated_usage_id: self._attr_native_value = None; return
+        required_keys = [
+            "start_reading",
+            "base_fee",
+            "prev_heat",
+            "curr_heat",
+            "prev_price",
+            "curr_price",
+            "correction_factor",
+        ]
+        if not all(self._number_ids.get(k) for k in required_keys) or not self._estimated_usage_id:
+            self._attr_native_value = None; return
         try:
             estimated_usage = float(self.hass.states.get(self._estimated_usage_id).state)
             base_fee = float(self.hass.states.get(self._number_ids["base_fee"]).state)
@@ -371,10 +476,24 @@ class EstimatedBillSensor(SensorEntity):
             prev_price = float(self.hass.states.get(self._number_ids["prev_price"]).state)
             curr_price = float(self.hass.states.get(self._number_ids["curr_price"]).state)
             correction_factor = float(self.hass.states.get(self._number_ids["correction_factor"]).state)
+            start_reading_for_attr = float(self.hass.states.get(self._number_ids["start_reading"]).state)
         except (ValueError, TypeError, KeyError, AttributeError): self._attr_native_value = None; return
         corrected_estimated_usage = estimated_usage * correction_factor
         today = date.today()
         calculator = GasBillCalculator(self._config[CONF_READING_DAY])
+        # 적용할 경감액 결정
+        month = today.month
+        is_winter = month in (12, 1, 2, 3)
+        reduction_id = self._number_ids.get("winter_reduction") if is_winter else self._number_ids.get("non_winter_reduction")
+        reduction_value = 0.0
+        if reduction_id:
+            try:
+                reduction_state = self.hass.states.get(reduction_id)
+                if reduction_state and reduction_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                    reduction_value = max(0.0, float(reduction_state.state))
+            except (ValueError, TypeError):
+                reduction_value = 0.0
+
         total_fee, _ = calculator.compute_total_bill_from_usage(
             corrected_usage=corrected_estimated_usage,
             base_fee=base_fee,
@@ -383,8 +502,57 @@ class EstimatedBillSensor(SensorEntity):
             prev_price=prev_price,
             curr_price=curr_price,
             today=today,
+            reduction=reduction_value,
         )
         self._attr_native_value = total_fee
+        # 월사용요금과 유사한 상세 속성 채우기 (합산 센서가 활용)
+        self._attr_extra_state_attributes = {
+            ATTR_START_DATE: None,  # calculator attrs에서 가져오기 위해 재계산
+            ATTR_END_DATE: None,
+            ATTR_DAYS_TOTAL: None,
+            ATTR_DAYS_PREV_MONTH: None,
+            ATTR_DAYS_CURR_MONTH: None,
+            "base_fee": base_fee,
+            ATTR_MONTHLY_START_READING: start_reading_for_attr,
+            ATTR_MONTHLY_GAS_USAGE: int(estimated_usage),
+            "correction_factor": correction_factor,
+            "corrected_monthly_usage": round(corrected_estimated_usage, 2),
+            "prev_month_calculated_fee": None,
+            "curr_month_calculated_fee": None,
+            "usage_fee": None,
+            "prev_month_reduction": None,
+            "curr_month_reduction": None,
+            "prev_month_reduction_applied": None,
+            "curr_month_reduction_applied": None,
+            "reduction_applied": None,
+        }
+        # 계산 기간/분할 요금 세부속성 보강
+        calculator = GasBillCalculator(self._config[CONF_READING_DAY])
+        fee_tmp, attrs_tmp = calculator.compute_total_bill_from_usage(
+            corrected_usage=corrected_estimated_usage,
+            base_fee=base_fee,
+            prev_heat=prev_heat,
+            curr_heat=curr_heat,
+            prev_price=prev_price,
+            curr_price=curr_price,
+            today=today,
+            reduction=reduction_value,
+        )
+        self._attr_extra_state_attributes.update({
+            ATTR_START_DATE: attrs_tmp.get("start_date"),
+            ATTR_END_DATE: attrs_tmp.get("end_date"),
+            ATTR_DAYS_TOTAL: attrs_tmp.get("days_total"),
+            ATTR_DAYS_PREV_MONTH: attrs_tmp.get("days_prev_month", 0),
+            ATTR_DAYS_CURR_MONTH: attrs_tmp.get("days_curr_month", 0),
+            "prev_month_calculated_fee": attrs_tmp.get("prev_month_calculated_fee"),
+            "curr_month_calculated_fee": attrs_tmp.get("curr_month_calculated_fee"),
+            "usage_fee": attrs_tmp.get("usage_fee"),
+            "prev_month_reduction": attrs_tmp.get("prev_month_reduction"),
+            "curr_month_reduction": attrs_tmp.get("curr_month_reduction"),
+            "prev_month_reduction_applied": attrs_tmp.get("prev_month_reduction_applied"),
+            "curr_month_reduction_applied": attrs_tmp.get("curr_month_reduction_applied"),
+            "reduction_applied": attrs_tmp.get("reduction_applied"),
+        })
 
 class PreviousMonthBillSensor(SensorEntity, RestoreEntity):
     """검침일 리셋 직전에 발행된 이벤트로 전월 총요금과 속성을 저장/복원하는 센서입니다.
@@ -530,6 +698,42 @@ class BimonthlyBillSensor(SensorEntity):
             today = date.today()
             agg = GasBillCalculator.aggregate_bimonthly(current_bill, prev_bill, today, bimonthly_cycle)
             self._attr_native_value = round(agg)
+            # 속성: 합산된 수치로 구성
+            curr_attrs = getattr(current_bill_state, "attributes", {}) if current_bill_state else {}
+            prev_attrs = getattr(prev_bill_state, "attributes", {}) if prev_bill_state else {}
+            prev_usage = int(float(prev_attrs.get(ATTR_MONTHLY_GAS_USAGE, 0) or 0))
+            curr_usage = int(float(curr_attrs.get(ATTR_MONTHLY_GAS_USAGE, 0) or 0))
+            prev_base_fee = float(prev_attrs.get("base_fee", 0) or 0)
+            curr_base_fee = float(curr_attrs.get("base_fee", 0) or 0)
+            prev_days_total = int(prev_attrs.get(ATTR_DAYS_TOTAL, 0) or 0)
+            curr_days_total = int(curr_attrs.get(ATTR_DAYS_TOTAL, 0) or 0)
+            prev_corrected = float(prev_attrs.get("corrected_monthly_usage", 0) or 0)
+            curr_corrected = float(curr_attrs.get("corrected_monthly_usage", 0) or 0)
+            prev_prev_fee = float(prev_attrs.get("prev_month_calculated_fee", 0) or 0)
+            prev_curr_fee = float(prev_attrs.get("curr_month_calculated_fee", 0) or 0)
+            curr_prev_fee = float(curr_attrs.get("prev_month_calculated_fee", 0) or 0)
+            curr_curr_fee = float(curr_attrs.get("curr_month_calculated_fee", 0) or 0)
+            # 기간 경계는 prev의 시작일과 curr의 종료일을 사용
+            start_date = prev_attrs.get(ATTR_START_DATE) or curr_attrs.get(ATTR_START_DATE)
+            end_date = curr_attrs.get(ATTR_END_DATE) or prev_attrs.get(ATTR_END_DATE)
+            self._attr_extra_state_attributes = {
+                ATTR_START_DATE: start_date,
+                ATTR_END_DATE: end_date,
+                ATTR_DAYS_TOTAL: prev_days_total + curr_days_total,
+                ATTR_DAYS_PREV_MONTH: int(prev_attrs.get(ATTR_DAYS_PREV_MONTH, 0) or 0) + int(curr_attrs.get(ATTR_DAYS_PREV_MONTH, 0) or 0),
+                ATTR_DAYS_CURR_MONTH: int(prev_attrs.get(ATTR_DAYS_CURR_MONTH, 0) or 0) + int(curr_attrs.get(ATTR_DAYS_CURR_MONTH, 0) or 0),
+                "base_fee": round(prev_base_fee + curr_base_fee),
+                ATTR_MONTHLY_START_READING: curr_attrs.get(ATTR_MONTHLY_START_READING),
+                ATTR_MONTHLY_GAS_USAGE: prev_usage + curr_usage,
+                "corrected_monthly_usage": round(prev_corrected + curr_corrected, 2),
+                "prev_month_calculated_fee": round(prev_prev_fee + curr_prev_fee),
+                "curr_month_calculated_fee": round(prev_curr_fee + curr_curr_fee),
+                "prev_month_reduction": float(prev_attrs.get("prev_month_reduction", 0) or 0) + float(curr_attrs.get("prev_month_reduction", 0) or 0),
+                "curr_month_reduction": float(prev_attrs.get("curr_month_reduction", 0) or 0) + float(curr_attrs.get("curr_month_reduction", 0) or 0),
+                "prev_month_reduction_applied": float(prev_attrs.get("prev_month_reduction_applied", 0) or 0) + float(curr_attrs.get("prev_month_reduction_applied", 0) or 0),
+                "curr_month_reduction_applied": float(prev_attrs.get("curr_month_reduction_applied", 0) or 0) + float(curr_attrs.get("curr_month_reduction_applied", 0) or 0),
+                "reduction_applied": float(prev_attrs.get("reduction_applied", 0) or 0) + float(curr_attrs.get("reduction_applied", 0) or 0),
+            }
         except (ValueError, TypeError): self._attr_native_value = None
 
 class PreviousBimonthlyBillSensor(SensorEntity, RestoreEntity):
@@ -665,4 +869,39 @@ class EstimatedBimonthlyBillSensor(SensorEntity):
             today = date.today()
             agg = GasBillCalculator.aggregate_bimonthly(current_estimated_bill, prev_actual_bill, today, bimonthly_cycle)
             self._attr_native_value = round(agg)
+            # 속성: 합산된 수치로 구성
+            curr_attrs = getattr(est_bill_state, "attributes", {}) if est_bill_state else {}
+            prev_attrs = getattr(prev_bill_state, "attributes", {}) if prev_bill_state else {}
+            prev_usage = int(float(prev_attrs.get(ATTR_MONTHLY_GAS_USAGE, 0) or 0))
+            curr_usage = int(float(curr_attrs.get(ATTR_MONTHLY_GAS_USAGE, 0) or 0))
+            prev_base_fee = float(prev_attrs.get("base_fee", 0) or 0)
+            curr_base_fee = float(curr_attrs.get("base_fee", 0) or 0)
+            prev_days_total = int(prev_attrs.get(ATTR_DAYS_TOTAL, 0) or 0)
+            curr_days_total = int(curr_attrs.get(ATTR_DAYS_TOTAL, 0) or 0)
+            prev_corrected = float(prev_attrs.get("corrected_monthly_usage", 0) or 0)
+            curr_corrected = float(curr_attrs.get("corrected_monthly_usage", 0) or 0)
+            prev_prev_fee = float(prev_attrs.get("prev_month_calculated_fee", 0) or 0)
+            prev_curr_fee = float(prev_attrs.get("curr_month_calculated_fee", 0) or 0)
+            curr_prev_fee = float(curr_attrs.get("prev_month_calculated_fee", 0) or 0)
+            curr_curr_fee = float(curr_attrs.get("curr_month_calculated_fee", 0) or 0)
+            start_date = prev_attrs.get(ATTR_START_DATE) or curr_attrs.get(ATTR_START_DATE)
+            end_date = curr_attrs.get(ATTR_END_DATE) or prev_attrs.get(ATTR_END_DATE)
+            self._attr_extra_state_attributes = {
+                ATTR_START_DATE: start_date,
+                ATTR_END_DATE: end_date,
+                ATTR_DAYS_TOTAL: prev_days_total + curr_days_total,
+                ATTR_DAYS_PREV_MONTH: int(prev_attrs.get(ATTR_DAYS_PREV_MONTH, 0) or 0) + int(curr_attrs.get(ATTR_DAYS_PREV_MONTH, 0) or 0),
+                ATTR_DAYS_CURR_MONTH: int(prev_attrs.get(ATTR_DAYS_CURR_MONTH, 0) or 0) + int(curr_attrs.get(ATTR_DAYS_CURR_MONTH, 0) or 0),
+                "base_fee": round(prev_base_fee + curr_base_fee),
+                ATTR_MONTHLY_START_READING: curr_attrs.get(ATTR_MONTHLY_START_READING),
+                ATTR_MONTHLY_GAS_USAGE: prev_usage + curr_usage,
+                "corrected_monthly_usage": round(prev_corrected + curr_corrected, 2),
+                "prev_month_calculated_fee": round(prev_prev_fee + curr_prev_fee),
+                "curr_month_calculated_fee": round(prev_curr_fee + curr_curr_fee),
+                "prev_month_reduction": float(prev_attrs.get("prev_month_reduction", 0) or 0) + float(curr_attrs.get("prev_month_reduction", 0) or 0),
+                "curr_month_reduction": float(prev_attrs.get("curr_month_reduction", 0) or 0) + float(curr_attrs.get("curr_month_reduction", 0) or 0),
+                "prev_month_reduction_applied": float(prev_attrs.get("prev_month_reduction_applied", 0) or 0) + float(curr_attrs.get("prev_month_reduction_applied", 0) or 0),
+                "curr_month_reduction_applied": float(prev_attrs.get("curr_month_reduction_applied", 0) or 0) + float(curr_attrs.get("curr_month_reduction_applied", 0) or 0),
+                "reduction_applied": float(prev_attrs.get("reduction_applied", 0) or 0) + float(curr_attrs.get("reduction_applied", 0) or 0),
+            }
         except (ValueError, TypeError): self._attr_native_value = None

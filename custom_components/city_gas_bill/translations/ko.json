@@ -57,7 +57,9 @@
       "curr_month_heat": { "name": "당월 평균열량" },
       "prev_month_price": { "name": "전월 열량단가" },
       "curr_month_price": { "name": "당월 열량단가" },
-      "correction_factor": { "name": "온압보정계수" }
+      "correction_factor": { "name": "온압보정계수" },
+      "winter_reduction": { "name": "동절기 경감액" },
+      "non_winter_reduction": { "name": "동절기외 경감액" }
     }
   }
 }
