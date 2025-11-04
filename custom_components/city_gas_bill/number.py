@@ -45,6 +45,8 @@ async def async_setup_entry(
         PrevMonthPriceNumber(entry, device_info),
         CurrMonthPriceNumber(entry, device_info),
         CorrectionFactorNumber(entry, device_info),
+        WinterReductionFeeNumber(entry, device_info),
+        NonWinterReductionFeeNumber(entry, device_info),
     ])
 
 class RestorableNumberEntity(NumberEntity, RestoreEntity):
@@ -138,6 +140,24 @@ class BaseFeeNumber(RestorableNumberEntity):
     _attr_native_min_value = 0; _attr_native_max_value = 10000; _attr_native_step = 1.0
     def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
         super().__init__(entry, device_info, default_value=DEFAULT_BASE_FEE)
+
+class WinterReductionFeeNumber(RestorableNumberEntity):
+    """동절기(12~3월) 월별 경감액 설정을 위한 엔티티입니다."""
+    _attr_translation_key = "winter_reduction_fee"
+    _attr_icon = "mdi:weather-snowy"
+    _attr_native_unit_of_measurement = "KRW"
+    _attr_native_min_value = 0; _attr_native_max_value = 1000000; _attr_native_step = 1.0
+    def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        super().__init__(entry, device_info, default_value=0.0)
+
+class NonWinterReductionFeeNumber(RestorableNumberEntity):
+    """동절기 외(4~11월) 월별 경감액 설정을 위한 엔티티입니다."""
+    _attr_translation_key = "non_winter_reduction_fee"
+    _attr_icon = "mdi:weather-sunny"
+    _attr_native_unit_of_measurement = "KRW"
+    _attr_native_min_value = 0; _attr_native_max_value = 1000000; _attr_native_step = 1.0
+    def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        super().__init__(entry, device_info, default_value=0.0)
 
 class MonthlyStartReadingNumber(RestorableNumberEntity):
     """

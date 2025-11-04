@@ -57,7 +57,9 @@
       "curr_month_heat": { "name": "Current Month Average Heat" },
       "prev_month_price": { "name": "Previous Month Unit Price" },
       "curr_month_price": { "name": "Current Month Unit Price" },
-      "correction_factor": { "name": "Temp/Pressure Correction Factor" }
+      "correction_factor": { "name": "Temp/Pressure Correction Factor" },
+      "winter_reduction_fee": { "name": "Winter Reduction Amount" },
+      "non_winter_reduction_fee": { "name": "Non-Winter Reduction Amount" }
     }
   }
 }
