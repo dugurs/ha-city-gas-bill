@@ -35,7 +35,7 @@ class SeoulGasProvider(GasProvider):
     @property
     def name(self) -> str:
         """UI에 표시될 공급사 이름을 반환합니다."""
-        return "서울, 서울도시가스"
+        return "서울도시가스"
 
     def _parse_heat_from_html(self, html_content: str, month_label: str) -> str | None:
         """

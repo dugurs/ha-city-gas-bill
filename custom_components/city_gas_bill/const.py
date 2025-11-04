@@ -54,14 +54,31 @@ DATA_CURR_MONTH_PRICE: Final = "curr_month_price"   # 당월 열량단가
 
 # --- 센서 속성(Attribute) 키 ---
 
-# '총 사용요금' 센서의 추가 정보(Attributes)에 표시될 내용의 키입니다.
-ATTR_START_DATE: Final = "start_date"          # 이번 달 청구 시작일
-ATTR_END_DATE: Final = "end_date"            # 현재 날짜 (계산 기준일)
-ATTR_DAYS_TOTAL: Final = "total_days"          # 총 사용일수
-ATTR_DAYS_PREV_MONTH: Final = "prev_month_days"  # 총 사용일수 중 전월에 해당하는 일수
-ATTR_DAYS_CURR_MONTH: Final = "curr_month_days"  # 총 사용일수 중 당월에 해당하는 일수
-ATTR_MONTHLY_GAS_USAGE: Final = "monthly_gas_usage" # 격월 센서가 '전월 총 사용요금'의 속성에서 전월 사용량 값을 가져올 때 사용하는 키
-ATTR_MONTHLY_START_READING: Final = "monthly_start_reading" # 월 검침 시작값(현재 검침 주기의 시작 계량기 값)
+# 센서의 추가 정보(Attributes)에 표시될 내용의 키입니다.
+ATTR_START_DATE: Final = "start_date"
+ATTR_END_DATE: Final = "end_date"
+ATTR_DAYS_TOTAL: Final = "days_total"
+ATTR_DAYS_PREV_MONTH: Final = "days_prev_month"
+ATTR_DAYS_CURR_MONTH: Final = "days_curr_month"
+
+# 상세 계산 정보 키
+ATTR_BASE_FEE: Final = "base_fee"
+ATTR_CORRECTION_FACTOR: Final = "correction_factor"
+ATTR_MONTHLY_GAS_USAGE: Final = "monthly_gas_usage"
+ATTR_CORRECTED_MONTHLY_USAGE: Final = "corrected_monthly_usage"
+ATTR_PREV_MONTH_CALCULATED_FEE: Final = "prev_month_calculated_fee"
+ATTR_CURR_MONTH_CALCULATED_FEE: Final = "curr_month_calculated_fee"
+ATTR_PREV_MONTH_REDUCTION_APPLIED: Final = "prev_month_reduction_applied"
+ATTR_CURR_MONTH_REDUCTION_APPLIED: Final = "curr_month_reduction_applied"
+
+# 격월 센서용 키
+ATTR_PREVIOUS_MONTH: Final = "previous_month"
+ATTR_CURRENT_MONTH: Final = "current_month"
+ATTR_PREVIOUS_MONTH_ACTUAL: Final = "previous_month_actual"
+ATTR_CURRENT_MONTH_ESTIMATED: Final = "current_month_estimated"
+ATTR_USAGE_PREVIOUS_MONTH: Final = "usage_previous_month"
+ATTR_USAGE_CURRENT_MONTH: Final = "usage_current_month"
+
 
 # --- 이벤트 이름 ---
 
