@@ -5,6 +5,7 @@
 '수동 입력' 공급사입니다.
 """
 from __future__ import annotations
+from typing import Final # Final 임포트
 
 from .base import GasProvider  # 모든 공급사의 부모 클래스
 
@@ -12,6 +13,7 @@ class ManualProvider(GasProvider):
     """
     사용자가 직접 평균열량 및 열량단가 데이터를 관리하고자 할 때 사용하는 공급사 클래스입니다.
     """
+    REGIONS: Final = {"manual": " 수동 입력"}
 
     @property
     def id(self) -> str:
@@ -21,7 +23,7 @@ class ManualProvider(GasProvider):
     @property
     def name(self) -> str:
         """UI 설정 화면에 표시될 이름을 반환합니다."""
-        return "수동 입력 (직접 관리)"
+        return "직접 관리"
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
         """

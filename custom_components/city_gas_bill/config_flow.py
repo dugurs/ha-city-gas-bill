@@ -14,7 +14,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
 
-from .const import DOMAIN, CONF_PROVIDER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE
+from .const import DOMAIN, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
 def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
@@ -27,13 +27,23 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
 
     # providers 폴더에 있는 모든 공급사들을 가져와서 드롭다운 목록 형태로 만듭니다.
     # 이 덕분에 새로운 공급사 파일을 추가하기만 하면 자동으로 설정 목록에 나타납니다.
-    provider_options: list[SelectOptionDict] = sorted(
-        [
-            SelectOptionDict(value=provider_id, label=provider(None).name)
-            for provider_id, provider in AVAILABLE_PROVIDERS.items()
-        ],
-        key=lambda item: item["label"], # 가나다 순으로 정렬
-    )
+    # 'REGIONS' 속성이 있는 공급사는 지역별로 별도의 옵션을 동적으로 생성합니다.
+    provider_options: list[SelectOptionDict] = []
+    for provider_id, provider_class in AVAILABLE_PROVIDERS.items():
+        provider_instance = provider_class(None)
+        
+        # 이제 모든 provider는 REGIONS 속성을 가지고 있음
+        for region_code, region_name in provider_instance.REGIONS.items():
+            label = f"{region_name}, {provider_instance.name}"
+            provider_options.append(
+                SelectOptionDict(
+                    value=f"{provider_id}|{region_code}",
+                    label=label
+                )
+            )
+
+    # 가나다 순으로 최종 목록 정렬
+    provider_options = sorted(provider_options, key=lambda item: item["label"])
 
     # '검침 주기' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
     # label: 사용자에게 보여지는 텍스트
@@ -44,12 +54,18 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         SelectOptionDict(value="even", label="격월 - 짝수월"),
     ]
 
+    # 공급사 선택기의 default 값 설정 방식 변경
+    # 저장된 provider와 region 코드를 조합하여 'provider_id|region_code' 형태로 만들어야 함
+    default_provider_selection = current_config.get(CONF_PROVIDER)
+    if current_config.get(CONF_PROVIDER_REGION):
+        default_provider_selection = f"{default_provider_selection}|{current_config.get(CONF_PROVIDER_REGION)}"
+
     # voluptuous를 사용하여 설정 폼의 각 필드를 정의합니다.
     return vol.Schema({
         # '도시가스 공급사' 필드 (드롭다운 메뉴)
         vol.Required(
             CONF_PROVIDER,
-            default=current_config.get(CONF_PROVIDER), # 기존 설정값이 있으면 기본값으로 보여줌
+            default=default_provider_selection, # 기존 설정값이 있으면 기본값으로 보여줌
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=provider_options,
@@ -94,6 +110,17 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         ),
     })
 
+def _parse_provider_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    """
+    '공급사ID|지역코드' 형태의 입력값을 파싱하여 분리하는 헬퍼 함수입니다.
+    """
+    provider_selection = user_input.pop(CONF_PROVIDER) # 폼에서 받은 값을 가져오고 제거
+    parts = provider_selection.split('|')
+    user_input[CONF_PROVIDER] = parts[0] # 실제 공급사 ID 저장
+    if len(parts) > 1:
+        user_input[CONF_PROVIDER_REGION] = parts[1] # 지역 코드가 있으면 저장
+    return user_input
+
 class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
     """
     최초 설정(통합구성요소 추가) 과정을 처리하는 Config Flow 핸들러입니다.
@@ -121,7 +148,9 @@ class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
         # 사용자가 폼을 채우고 '제출' 버튼을 눌렀다면 user_input에 값이 들어옵니다.
         if user_input is not None:
             # 입력받은 설정값을 사용하여 새로운 설정 엔트리(ConfigEntry)를 생성하고 설정을 완료합니다.
-            return self.async_create_entry(title="도시가스 요금", data=user_input)
+            # 사용자가 제출한 값을 파싱하여 data에 저장
+            data = _parse_provider_input(user_input)
+            return self.async_create_entry(title="City Gas Bill", data=data)
         
         # user_input이 None이면, 사용자에게 설정 폼을 처음 보여주는 단계입니다.
         # _get_data_schema()를 호출하여 생성된 폼을 사용자에게 표시합니다.
@@ -140,7 +169,9 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
         # 사용자가 옵션 변경 폼을 제출했다면 user_input에 값이 들어옵니다.
         if user_input is not None:
             # 빈 title과 함께 엔트리를 생성하여 기존 옵션을 업데이트하고 완료합니다.
-            return self.async_create_entry(title="", data=user_input)
+            # 옵션 변경 시에도 동일하게 파싱 로직 적용
+            data = _parse_provider_input(user_input)
+            return self.async_create_entry(title="", data=data)
 
         # 현재 저장된 설정값(옵션 또는 최초 데이터)을 가져옵니다.
         current_config = self.config_entry.options or self.config_entry.data

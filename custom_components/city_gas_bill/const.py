@@ -32,6 +32,7 @@ PLATFORMS: Final = [SENSOR, NUMBER, BUTTON]
 
 # 사용자가 config flow (UI 설정 화면)에서 입력하는 값들의 내부적인 키 이름입니다.
 CONF_PROVIDER: Final = "provider"          # 도시가스 공급사
+CONF_PROVIDER_REGION: Final = "provider_region"  # 공급사 지역 선택을 위한 키
 CONF_GAS_SENSOR: Final = "gas_sensor"      # 가스 계량기 센서 엔티티 ID
 CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
 CONF_READING_TIME: Final = "reading_time"  # 일일 정기 검침시간 (HH:MM)

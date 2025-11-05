@@ -13,15 +13,17 @@ class GasProvider(ABC):
     새로운 공급사를 추가하려면 반드시 이 클래스를 상속받아야 합니다.
     """
 
-    def __init__(self, websession: aiohttp.ClientSession | None):
+    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None):
         """
         공급사를 초기화합니다.
         
         Args:
             websession: 웹사이트에 HTTP 요청을 보낼 때 사용할 aiohttp 클라이언트 세션입니다.
                         코디네이터로부터 전달받습니다.
+            region: 공급사가 지역별로 다른 로직을 가져야 할 때 사용되는 지역 코드입니다.
         """
         self.websession = websession
+        self.region = region
 
     # --- 아래의 4개 속성/메소드는 @abstractmethod로 선언되어 ---
     # --- 이 클래스를 상속받는 모든 자식 클래스에서 반드시 구현해야 합니다. ---
@@ -38,9 +40,19 @@ class GasProvider(ABC):
 
     @property
     @abstractmethod
+    def REGIONS(self) -> dict[str, str]:
+        """
+        이 공급사가 지원하는 지역 목록을 반환해야 합니다.
+        - Key: API 호출 등에 사용될 내부적인 지역 코드 (문자열)
+        - Value: UI에 표시될 지역 이름 (문자열)
+        예: {"1": "서울", "8": "경기"}
+        """
+
+    @property
+    @abstractmethod
     def name(self) -> str:
         """
-        사용자에게 보여질 공급사의 이름(예: "서울도시가스")을 반환해야 합니다.
+        사용자에게 보여질 공급사이름 (예: "서울도시가스")을 반환해야 합니다.
         이 이름은 설정 UI의 드롭다운 목록에 표시됩니다.
         """
 

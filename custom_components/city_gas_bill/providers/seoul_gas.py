@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import re  # 정규 표현식을 사용하기 위한 모듈
 import logging
+from typing import Final # Final 임포트
 
 from bs4 import BeautifulSoup  # HTML 파싱을 위한 BeautifulSoup 라이브러리
 
@@ -26,6 +27,8 @@ class SeoulGasProvider(GasProvider):
     # 데이터를 가져올 웹사이트의 주소를 상수로 정의합니다.
     URL_HEAT = "https://www.seoulgas.co.kr/front/payment/selectHeat.do"    # 평균열량 조회 페이지
     URL_PRICE = "https://www.seoulgas.co.kr/front/payment/gasPayTable.do" # 요금표 페이지
+
+    REGIONS: Final = {"01": "서울", "02": "경기"}
 
     @property
     def id(self) -> str:
@@ -109,9 +112,15 @@ class SeoulGasProvider(GasProvider):
         """
         서울도시가스 웹사이트의 요금표에서 전월 및 당월의 열량단가(주택취사용)를 스크래핑합니다.
         """
+        if not self.region:
+            _LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
+            return None
         try:
+            # 요청에 사용할 Payload를 생성합니다.
+            payload = {"gaspayArea": self.region}
+            _LOGGER.debug("서울도시가스 열량단가 조회 요청 (지역: %s), Payload: %s", self.region, payload)
             # 요금표 페이지에 GET 요청을 보냅니다.
-            async with self.websession.get(self.URL_PRICE) as response:
+            async with self.websession.post(self.URL_PRICE, data=payload) as response:
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
                 

@@ -1,4 +1,53 @@
+
+가스요금 참고 주소
+http://www.citygas.or.kr/company/situation.jsp
+
+
 ### 코드 작성 지침
 코드 수정시 수정되지 않음 부분은 변경하지 않고 그대로 보여주기. 주석, 코드스타일 모두.
 코드 작성시 코드 재활용을 고려하여 작성 하기.
 코드 추가시 한글 주석 포함하기.
+
+### number 수정
+전월열량단가,당원열량단가를
+전월열량단가(취사),전월열량단가(난방),당월열량단가(취사),당월열량단가(난방) 으로 분리 수정
+취사난방경계 number 추가, 기본값 0 단위 MJ
+
+### 사용요금 계산 방법 수정.
+취사난방경계가 0 이면 난방열량단가를기준으로 동일
+취사난방경계가 0보다 크면
+취사난방경계사용량 을 구하고 (취사난방경계 ÷ 당월열량단가)
+사용량이 취사난방경계사용량 까지는 취사열량단가를 사용, 초과 사용량은 난방열량단가 사용해 계산
+
+##공급사 추가
+코원에너지서비스
+
+###요금단가 스크래핑
+요근단가 월 파라미터 구하기
+https://www.skens.com/koone/rate/guide.do
+xpath
+//*[@id="item-select"]
+하위 options 
+text가 년월일
+필요한 년월의 value가 Payload의 item-select에사용.
+
+### 지역
+서울 274
+경기 275
+부산 276
+
+### 용도구분
+취사전용
+개별난방
+중앙난방
+
+
+### 지역별 단가
+https://www.skens.com/koone/rate/guide.do
+Request Method
+POST
+Payload
+regionSeq=274&seq=0&item-select=3008
+필요data
+xpath
+//*[@id="contents"]/div[4]/table/tbody 중

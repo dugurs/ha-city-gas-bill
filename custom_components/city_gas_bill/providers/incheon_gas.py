@@ -9,6 +9,7 @@ import time
 import random
 import re  # 정규 표현식 사용
 import logging
+from typing import Final # Final 임포트
 
 from dateutil.relativedelta import relativedelta
 
@@ -28,6 +29,7 @@ class IncheonGasProvider(GasProvider):
     # 데이터 조회를 위한 DWR 엔드포인트 URL
     URL_PRICE = "https://icgas.co.kr:8443/recruit/dwr/exec/ICGAS.getChargecost.dwr"
     URL_HEAT = "https://icgas.co.kr:8443/recruit/dwr/exec/PAY.getSimplePayCalListData.dwr"
+    REGIONS: Final = {"1": "인천","2": "경기",}
 
     @property
     def id(self) -> str:
@@ -37,7 +39,7 @@ class IncheonGasProvider(GasProvider):
     @property
     def name(self) -> str:
         """UI에 표시될 공급사 이름을 반환합니다."""
-        return "인천도시가스 (인천,코원)"
+        return "인천도시가스(코원)"
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
         """
@@ -93,8 +95,7 @@ class IncheonGasProvider(GasProvider):
             "c0-scriptName": "ICGAS",
             "c0-methodName": "getChargecost",
             "c0-id": session_id,
-            # --- 인천 지역 코드는 '1' ---
-            "c0-param0": "string:1",
+            "c0-param0": f"string:{self.region}",
             "c0-param1": "string:주택취사", # 요금 종류
             "c0-param2": f"string:{target_date.strftime('%Y-%m-%d')}", # 조회 기준일
             "c0-param3": "string:주택취사",
