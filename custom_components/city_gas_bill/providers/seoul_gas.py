@@ -178,3 +178,48 @@ class SeoulGasProvider(GasProvider):
         except Exception as err:
             _LOGGER.error("서울도시가스 열량단가 데이터 스크래핑 중 오류 발생: %s", err)
             return None
+
+    async def scrape_base_fee(self) -> float | None:
+        """서울도시가스 웹사이트에서 현재 적용되는 기본요금을 스크래핑합니다."""
+        if not self.region:
+            _LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            return None
+        try:
+            # 지역 코드를 포함하여 POST 요청을 보냅니다.
+            payload = {"gaspayArea": self.region}
+            async with self.websession.post(self.URL_PRICE, data=payload) as response:
+                response.raise_for_status()
+                soup = BeautifulSoup(await response.text(), "html.parser")
+                
+                content_div = soup.select_one("#content")
+                if not content_div:
+                    _LOGGER.error("서울도시가스 기본요금 스크래핑을 위한 #content 영역을 찾지 못했습니다.")
+                    return None
+                
+                # #content 영역 내의 모든 li 태그를 순회하며 '주택용 기본요금' 텍스트를 찾습니다.
+                # 이 방식은 웹사이트 구조가 일부 변경되어도 더 안정적으로 작동합니다.
+                base_fee_text = None
+                for item in content_div.find_all("li"):
+                    if "주택용 기본요금" in item.get_text():
+                        base_fee_text = item.get_text(strip=True)
+                        break
+                
+                if not base_fee_text:
+                    _LOGGER.error("기본요금 정보가 포함된 텍스트('주택용 기본요금')를 찾지 못했습니다.")
+                    return None
+
+                # 정규식을 사용하여 텍스트에서 숫자(콤마 포함)를 추출합니다.
+                match = re.search(r"([\d,]+)\s*원", base_fee_text)
+                if match:
+                    base_fee_str = match.group(1).replace(",", "")
+                    return float(base_fee_str)
+
+                _LOGGER.error("기본요금 텍스트('%s')에서 요금 숫자를 추출하지 못했습니다.", base_fee_text)
+                return None
+        
+        except (ValueError, TypeError) as e:
+            _LOGGER.error("서울도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            return None
+        except Exception as err:
+            _LOGGER.error("서울도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            return None

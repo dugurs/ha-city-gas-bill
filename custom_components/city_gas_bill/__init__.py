@@ -104,6 +104,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # 리로드가 예약되었음을 기록하여 다음부터는 실행되지 않도록 합니다.
         new_data = {**entry.data, "_initial_reload_done": True}
         hass.config_entries.async_update_entry(entry, data=new_data)
+        
+    # 최초 설정 시 기본요금을 자동으로 한 번 스크랩하는 로직
+    if not entry.data.get("_initial_base_fee_scraped"):
+        LOGGER.info("최초 설정 확인: 기본요금 자동 조회를 3초 후에 시도합니다.")
+
+        async def _scrape_initial_base_fee(_=None):
+            """엔티티가 준비될 시간을 기다린 후, 기본요금을 스크랩하고 값을 설정합니다."""
+            LOGGER.debug("초기 기본요금 조회를 시작합니다.")
+            base_fee = await coordinator.provider.scrape_base_fee()
+
+            if base_fee is not None:
+                ent_reg = er.async_get(hass)
+                entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_base_fee")
+                if entity_id:
+                    LOGGER.info("조회된 초기 기본요금 %s원을 '%s' 엔티티에 설정합니다.", base_fee, entity_id)
+                    await hass.services.async_call(
+                        "number", "set_value",
+                        {"entity_id": entity_id, "value": base_fee},
+                        blocking=False
+                    )
+                else:
+                    LOGGER.warning("초기 기본요금을 설정할 '기본 요금' Number 엔티티를 아직 찾을 수 없습니다.")
+            else:
+                LOGGER.warning("초기 기본요금을 가져오는 데 실패했습니다. 수동으로 설정해주세요.")
+
+            # 성공 여부와 관계없이 다시 실행되지 않도록 플래그를 업데이트합니다.
+            new_data = {**entry.data, "_initial_base_fee_scraped": True}
+            hass.config_entries.async_update_entry(entry, data=new_data)
+
+        # 3초 후에 함수를 실행하여 엔티티가 생성될 시간을 확보합니다.
+        async_call_later(hass, 3, _scrape_initial_base_fee)
 
     async def handle_update_service(call: ServiceCall) -> None:
         """
@@ -119,6 +150,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "update_data", handle_update_service)
     # 통합구성요소가 제거될 때 등록했던 서비스도 함께 제거되도록 합니다.
     entry.async_on_unload(lambda: hass.services.async_remove(DOMAIN, "update_data"))
+
+    async def handle_update_base_fee_service(call: ServiceCall) -> None:
+        """
+        공급사 웹사이트에서 최신 기본요금을 가져와 Number 엔티티를 업데이트하는 서비스 핸들러입니다.
+        """
+        LOGGER.info("서비스 호출로 기본요금 업데이트를 시작합니다.")
+        coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
+        if not coordinator:
+            LOGGER.error("코디네이터를 찾을 수 없어 기본요금을 업데이트할 수 없습니다.")
+            return
+
+        # 공급사의 기본요금 스크래핑 메소드 호출
+        base_fee = await coordinator.provider.scrape_base_fee()
+
+        if base_fee is not None:
+            ent_reg = er.async_get(hass)
+            entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_base_fee")
+            
+            if entity_id:
+                LOGGER.info("새로운 기본요금 %s원을 '%s' 엔티티에 설정합니다.", base_fee, entity_id)
+                await hass.services.async_call(
+                    "number", "set_value",
+                    {"entity_id": entity_id, "value": base_fee},
+                    blocking=False
+                )
+            else:
+                LOGGER.warning("'기본 요금' Number 엔티티를 찾을 수 없어 값을 업데이트하지 못했습니다.")
+        else:
+            LOGGER.warning("%s 공급사에서 기본요금을 가져오는 데 실패했습니다.", coordinator.provider.name)
+
+    # 'city_gas_bill.update_base_fee' 서비스를 등록합니다.
+    hass.services.async_register(DOMAIN, "update_base_fee", handle_update_base_fee_service)
+    entry.async_on_unload(lambda: hass.services.async_remove(DOMAIN, "update_base_fee"))
 
     return True
 

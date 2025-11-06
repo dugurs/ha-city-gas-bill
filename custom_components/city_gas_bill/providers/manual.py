@@ -42,3 +42,7 @@ class ManualProvider(GasProvider):
         Number 엔티티의 값을 덮어쓰지 않도록 합니다.
         """
         return None
+
+    async def scrape_base_fee(self) -> float | None:
+        """수동 입력 모드에서는 기본요금을 스크래핑하지 않습니다."""
+        return None

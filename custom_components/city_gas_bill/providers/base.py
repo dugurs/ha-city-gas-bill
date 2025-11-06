@@ -89,3 +89,12 @@ class GasProvider(ABC):
         }
         실패 시에는 None을 반환해야 합니다.
         """
+
+    @abstractmethod
+    async def scrape_base_fee(self) -> float | None:
+        """
+        웹사이트에서 '기본요금' 데이터를 스크래핑하는 비동기 메소드입니다.
+        성공 시, 숫자(float)를 반환해야 합니다.
+        실패 시에는 None을 반환해야 합니다.
+        지원하지 않는 경우에도 None을 반환합니다.
+        """

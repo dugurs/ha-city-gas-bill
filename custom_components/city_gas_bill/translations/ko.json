@@ -43,7 +43,8 @@
   },
   "entity": {
     "button": {
-      "update_data": { "name": "데이터 갱신" }
+      "update_data": { "name": "데이터 갱신" },
+      "update_base_fee": { "name": "기본요금 가져오기" }
     },
     "sensor": {
       "monthly_gas_usage": { "name": "월 가스 사용량" },

@@ -38,7 +38,10 @@ async def async_setup_entry(
     )
 
     # 생성할 버튼 엔티티(UpdateDataButton)를 리스트에 담아 Home Assistant에 추가합니다.
-    async_add_entities([UpdateDataButton(hass, entry, device_info)])
+    async_add_entities([
+        UpdateDataButton(hass, entry, device_info),
+        UpdateBaseFeeButton(hass, entry, device_info)
+    ])
 
 
 class UpdateDataButton(ButtonEntity):
@@ -77,4 +80,37 @@ class UpdateDataButton(ButtonEntity):
             "update_data",   # 서비스 이름
             {},              # 서비스에 전달할 파라미터 (없음)
             blocking=False,  # 이 서비스가 끝날 때까지 기다리지 않음 (비동기 호출)
+        )
+
+class UpdateBaseFeeButton(ButtonEntity):
+    """
+    공급사로부터 기본요금을 수동으로 가져오는 버튼을 나타내는 클래스입니다.
+    """
+    _attr_has_entity_name = True
+    _attr_translation_key = "update_base_fee" # 번역 키
+    _attr_icon = "mdi:cash-sync" # 아이콘
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        device_info: DeviceInfo,
+    ) -> None:
+        """기본요금 업데이트 버튼을 초기화합니다."""
+        self.hass = hass
+        self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
+        self._attr_device_info = device_info
+
+    async def async_press(self) -> None:
+        """
+        사용자가 UI에서 이 버튼을 눌렀을 때 호출되는 메소드입니다.
+        """
+        LOGGER.debug("'기본요금 가져오기' 버튼이 눌렸습니다. update_base_fee 서비스를 호출합니다.")
+        
+        # 'city_gas_bill.update_base_fee' 서비스를 호출합니다.
+        await self.hass.services.async_call(
+            DOMAIN,
+            "update_base_fee", # 새로 추가된 서비스 이름
+            {},
+            blocking=False,
         )

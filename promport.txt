@@ -97,3 +97,97 @@ respones
 {"list":[{"COMPNAME":"부산도시가스","I_FDATE":"20251101","O_FDATE":"20251101","COMPDESC":"부산도시가스","I_CALOR":"C000","O_TDATE":"20251105","I_TDATE":"20251106","E_CALOR":"42.505000"}]}
 필요 data
 E_CALOR
+
+### 기본요금
+Request URL
+https://www.skens.com/busan/rate/guide.do
+Request Method
+GET
+xpath
+//*[@id="baseDesc"]
+"주택용의 경우 900원/월의 기본요금이 부과됩니다. " 과 같은 text중에 900원이 기본요금
+
+
+### 코원도시가스 기본요금
+지역코드 사용 조회
+https://www.skens.com/koone/rate/guide.do?regionSeq=275
+Request Method
+GET
+필요data
+xpath
+//*[@id="contents"]/div[4]/table/tbody 중
+td text가 '주택용 취사'를 찾고 그다음 td가 기본요금
+
+
+### 인천도시가스 기본요금 스크랩 추가
+Request URL
+https://icgas.co.kr:8443/recruit/chargecost.jsp
+Request Method
+GET
+//*[@id="Table_01"]/tbody/tr[7]/td[2]
+주) 1. 기본요금은 주택용을 대상으로 인천 1,000원/월·가구,  경기 1,250원/월·가구 적용함
+text중 인천 기본요그은 1,000원, 경기 기본요금은 1,250원
+
+### 서울도시가스 기본요금 스크랩
+Request URL
+https://www.seoulgas.co.kr/front/payment/gasPayTable.do
+Request Method
+GET
+xpath
+//*[@id="content"]/div[2]/ul[2]/li[1]
+※ 주택용 기본요금 월 1,250원
+text중 1,250이 기본요금
+
+
+### 예스코 기본요금 스크랩
+기본 적으로는 _fetch_price_for_month(first_day_curr_month) 과 같고 
+response data 중 
+tableMap 에서 "TYPENAME": "기본료","CITYCD": "1" 과 같은 "AMOUNT_PERC"가 서울 기본요금
+tableMap 에서 "TYPENAME": "기본료","CITYCD": "8" 과 같은 "AMOUNT_PERC"가 경기 기본요금
+
+
+## 귀뚜라미에너지 프로바이더 추가
+
+### 지역
+서울
+
+### 용도
+중앙난방 지원 안함
+
+### 기본요금 스크랩
+Request URL
+https://kituramienergy.co.kr/sub/cgas_guide/c_guid_02_02_01.asp
+Request Method
+GET
+xpath
+/html/body/div[2]/div/p[1]
+text
+주  1. 기본요금은 주택용에 1,250원/월 적용
+필요 data 1,250
+
+### 열량단가 스크랩
+Request URL
+https://kituramienergy.co.kr/sub/cgas_guide/c_guid_02_02_01.asp
+Request Method
+GET
+년월no 패턴
+77 는 2025년11월
+76 는 2025년10월
+75 는 2025년9월
+74 는 2025년8월
+과 같은 패턴 으로 년월no 를 구해애하고 이것으로 원하는월의 id part를 만들어 가져와야함.
+2025년11월 이면 
+xpath
+//*[@id="part77"]/div/table/tbody/tr[1]/td[2] 가 전월열량단가(취사,난방 동일)
+//*[@id="part77"]/div/table/tbody/tr[1]/td[3] 가 당월열량단가(취사,난방 동일)
+
+### 평균열량 스크랩
+Request URL
+https://kituramienergy.co.kr/sub/cgas_guide/c_guid_02_02_02.asp
+Request Method
+POST
+Payload
+f_date=2025-11-01&t_date=2025-11-05
+xpath
+/html/body/div[2]/div/div[2]/span
+가 평균열량

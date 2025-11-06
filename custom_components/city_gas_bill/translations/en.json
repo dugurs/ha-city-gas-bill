@@ -43,7 +43,8 @@
   },
   "entity": {
     "button": {
-      "update_data": { "name": "Sync Data Now" }
+      "update_data": { "name": "Sync Data Now" },
+      "update_base_fee": { "name": "Fetch Base Fee" }
     },
     "sensor": {
       "monthly_gas_usage": { "name": "Monthly Gas Usage" },

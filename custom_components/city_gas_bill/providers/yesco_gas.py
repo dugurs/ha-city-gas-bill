@@ -152,3 +152,37 @@ class YescoGasProvider(GasProvider):
         
         _LOGGER.error("예스코의 열량단가 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
+        
+    async def scrape_base_fee(self) -> float | None:
+        """예스코 API에서 현재 지역에 맞는 기본요금을 가져옵니다."""
+        if not self.region:
+            _LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            return None
+
+        today = date.today()
+        payload = {"id": "E0006", "I_DATAB": today.strftime("%Y%m01")}
+
+        try:
+            async with self.websession.post(self.API_URL, json=payload) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                if data.get("success"):
+                    # API 응답의 모든 항목을 순회합니다.
+                    for item in data["data"]["Tables"]["ITAB"]["tableMap"]:
+                        # 'TYPENAME'이 '기본료'이고, 'CITYCD'가 현재 설정된 지역과 일치하는 항목을 찾습니다.
+                        if item.get("TYPENAME") == "기본료" and item.get("CITYCD") == self.region:
+                            return float(item["AMOUNT_PERC"])
+                    
+                    # 루프를 다 돌아도 일치하는 항목이 없는 경우
+                    _LOGGER.error("예스코 API 응답에서 '%s' 지역의 기본료 항목을 찾지 못했습니다.", self.REGIONS.get(self.region, self.region))
+                    return None
+                else:
+                    _LOGGER.error("예스코 기본요금 조회 API에서 오류 응답: %s", data.get("message"))
+                    return None
+        except (ValueError, TypeError, KeyError) as e:
+            _LOGGER.error("예스코 기본요금 데이터 파싱 중 오류 발생: %s", e)
+            return None
+        except Exception as err:
+            _LOGGER.error("예스코 기본요금 조회 중 오류 발생: %s", err)
+            return None

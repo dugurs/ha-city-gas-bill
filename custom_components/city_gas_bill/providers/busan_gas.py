@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import logging
 from typing import Final, Any
+import re # 정규식 모듈 임포트
 
 from bs4 import BeautifulSoup
 from dateutil.relativedelta import relativedelta
@@ -194,3 +195,43 @@ class BusanGasProvider(GasProvider):
 
         _LOGGER.error("부산도시가스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
+
+    async def scrape_base_fee(self) -> float | None:
+        """
+        부산도시가스 웹사이트에서 현재 적용되는 기본요금을 스크래핑합니다.
+        HTML에 포함된 JavaScript 코드에서 동적으로 설정되는 안내 문구의 내용을 파싱합니다.
+        """
+        try:
+            # 기본요금은 현재 시점의 값만 필요하므로, GET 요청으로 최신 페이지를 가져옵니다.
+            async with self.websession.get(self.URL_PRICE_PAGE) as response:
+                response.raise_for_status()
+                html_text = await response.text()
+
+            # JavaScript 코드 `$("#baseDesc").html(...)` 패턴을 찾기 위한 정규식
+            # re.DOTALL 옵션은 .이 줄바꿈 문자도 포함하도록 하여 여러 줄에 걸친 문자열도 찾게 합니다.
+            script_match = re.search(r'\$\("#baseDesc"\)\.html\(([\'"])(.*?)\1\)', html_text, re.DOTALL)
+            
+            if not script_match:
+                _LOGGER.error("부산도시가스 기본요금 JavaScript 코드('#baseDesc').html(...)를 찾지 못했습니다.")
+                return None
+
+            # 정규식의 두 번째 그룹이 실제 안내 문구 내용입니다.
+            text_content = script_match.group(2)
+            
+            # 안내 문구에서 숫자와 '원'이 함께 있는 부분을 찾습니다.
+            fee_match = re.search(r"([\d,]+)\s*원", text_content)
+            
+            if fee_match:
+                # 찾은 숫자 문자열에서 콤마(,)를 제거하고 float으로 변환하여 반환합니다.
+                base_fee_str = fee_match.group(1).replace(",", "")
+                return float(base_fee_str)
+
+            _LOGGER.error("기본요금 스크립트 내용에서 요금 숫자를 찾지 못했습니다: %s", text_content)
+            return None
+
+        except (ValueError, TypeError) as e:
+            _LOGGER.error("부산도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            return None
+        except Exception as err:
+            _LOGGER.error("부산도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            return None

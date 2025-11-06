@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import logging
 from typing import Final, Any
+import re # 정규식 모듈 임포트
 
 from bs4 import BeautifulSoup
 from dateutil.relativedelta import relativedelta
@@ -188,3 +189,44 @@ class KooneGasProvider(GasProvider):
 
         _LOGGER.error("코원에너지서비스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
+
+    async def scrape_base_fee(self) -> float | None:
+        """
+        코원에너지서비스 웹사이트에서 현재 적용되는 기본요금을 스크래핑합니다.
+        요금표 테이블에서 '주택용 취사' 항목의 기본요금을 기준으로 합니다.
+        """
+        if not self.region:
+            _LOGGER.error("코원에너지서비스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            return None
+
+        try:
+            # 지역 코드를 포함한 URL로 GET 요청을 보냅니다.
+            url = f"{self.URL_PRICE_PAGE}?regionSeq={self.region}"
+            async with self.websession.get(url) as response:
+                response.raise_for_status()
+                soup = BeautifulSoup(await response.text(), "html.parser")
+
+            # 요금표가 들어있는 테이블을 찾습니다.
+            table = soup.select_one("#contents > div:nth-of-type(4) > table")
+            if not table:
+                _LOGGER.error("코원에너지서비스 기본요금 테이블을 찾지 못했습니다.")
+                return None
+
+            rows = table.select("tbody tr")
+            for row in rows:
+                cells = row.find_all("td")
+                # [0]: 용도, [1]: 기본요금, [2]: 열량단가
+                if len(cells) > 1 and cells[0].get_text(strip=True) == "주택용 취사":
+                    base_fee_str = cells[1].get_text(strip=True).replace(",", "")
+                    return float(base_fee_str)
+
+            # 루프를 다 돌아도 '주택용 취사' 행을 찾지 못한 경우
+            _LOGGER.error("코원에너지서비스 요금표에서 '주택용 취사' 행을 찾지 못해 기본요금을 조회할 수 없습니다.")
+            return None
+
+        except (ValueError, TypeError, IndexError) as e:
+            _LOGGER.error("코원에너지서비스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            return None
+        except Exception as err:
+            _LOGGER.error("코원에너지서비스 기본요금 스크래핑 중 오류 발생: %s", err)
+            return None

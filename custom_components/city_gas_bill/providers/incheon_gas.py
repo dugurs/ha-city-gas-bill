@@ -11,6 +11,7 @@ import re  # 정규 표현식 사용
 import logging
 from typing import Final # Final 임포트
 
+from bs4 import BeautifulSoup
 from dateutil.relativedelta import relativedelta
 
 from .base import GasProvider
@@ -30,6 +31,7 @@ class IncheonGasProvider(GasProvider):
     # 데이터 조회를 위한 DWR 엔드포인트 URL
     URL_PRICE = "https://icgas.co.kr:8443/recruit/dwr/exec/ICGAS.getChargecost.dwr"
     URL_HEAT = "https://icgas.co.kr:8443/recruit/dwr/exec/PAY.getSimplePayCalListData.dwr"
+    URL_BASE_FEE_PAGE = "https://icgas.co.kr:8443/recruit/chargecost.jsp"
     REGIONS: Final = {"1": "인천","2": "경기",}
 
     @property
@@ -168,3 +170,44 @@ class IncheonGasProvider(GasProvider):
         
         _LOGGER.error("인천도시가스의 취사/난방 단가 데이터를 모두 가져오지 못했습니다.")
         return None
+
+    async def scrape_base_fee(self) -> float | None:
+        """
+        인천도시가스 웹사이트에서 현재 지역에 맞는 기본요금을 스크래핑합니다.
+        전체 HTML 응답에서 '인천 xxx원/월' 또는 '경기 xxx원/월' 패턴을 정규식으로 찾습니다.
+        """
+        if not self.region:
+            _LOGGER.error("인천도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            return None
+
+        try:
+            async with self.websession.get(self.URL_BASE_FEE_PAGE) as response:
+                response.raise_for_status()
+                html_text = await response.text()
+            
+            # 설정된 지역 코드로부터 지역 이름("인천" 또는 "경기")을 가져옵니다.
+            region_name = self.REGIONS.get(self.region)
+            if not region_name:
+                _LOGGER.warning("알 수 없는 지역 코드(%s)입니다. 기본요금을 조회할 수 없습니다.", self.region)
+                return None
+            
+            # 지역 이름 뒤에 오는 숫자 요금을 찾기 위한 정규식 패턴을 생성합니다.
+            # 예: "인천\s*([\d,]+)\s*원/월"
+            pattern = rf"{region_name}\s*([\d,]+)\s*원/월"
+            match = re.search(pattern, html_text)
+            
+            if match:
+                # 찾은 숫자 문자열에서 콤마(,)를 제거하고 float으로 변환하여 반환합니다.
+                base_fee_str = match.group(1).replace(",", "")
+                return float(base_fee_str)
+
+            # 정규식에 맞는 패턴을 찾지 못한 경우
+            _LOGGER.error("기본요금 안내 문구에서 '%s' 지역의 요금 패턴을 찾지 못했습니다.", region_name)
+            return None
+            
+        except (ValueError, TypeError) as e:
+            _LOGGER.error("인천도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            return None
+        except Exception as err:
+            _LOGGER.error("인천도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            return None
