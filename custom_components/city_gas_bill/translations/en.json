@@ -7,12 +7,16 @@
         "description": "Please select your gas provider, meter sensor, reading day, and billing cycle.",
         "data": {
           "provider": "Gas Provider",
+          "usage_type": "Gas Usage Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
           "bimonthly_cycle": "Billing Cycle"
         }
       }
+    },
+    "error": {
+      "central_heating_not_supported": "The selected provider does not support the central heating plan."
     },
     "abort": {
       "single_instance_allowed": "An instance of City Gas Bill is already configured. Only one is allowed."
@@ -25,12 +29,16 @@
         "description": "Change the provider, gas sensor, or billing cycle used for calculation.",
         "data": {
           "provider": "Gas Provider",
+          "usage_type": "Gas Usage Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
           "bimonthly_cycle": "Billing Cycle"
         }
       }
+    },
+    "error": {
+      "central_heating_not_supported": "The selected provider does not support the central heating plan."
     }
   },
   "entity": {
@@ -55,11 +63,14 @@
       "monthly_start_reading": { "name": "Monthly Start Reading" },
       "prev_month_heat": { "name": "Previous Month Average Heat" },
       "curr_month_heat": { "name": "Current Month Average Heat" },
-      "prev_month_price": { "name": "Previous Month Unit Price" },
-      "curr_month_price": { "name": "Current Month Unit Price" },
+      "prev_month_price_cooking": { "name": "Previous Month Unit Price (Cooking)" },
+      "prev_month_price_heating": { "name": "Previous Month Unit Price (Heating)" },
+      "curr_month_price_cooking": { "name": "Current Month Unit Price (Cooking)" },
+      "curr_month_price_heating": { "name": "Current Month Unit Price (Heating)" },
       "correction_factor": { "name": "Temp/Pressure Correction Factor" },
       "winter_reduction_fee": { "name": "Winter Reduction Amount" },
-      "non_winter_reduction_fee": { "name": "Non-Winter Reduction Amount" }
+      "non_winter_reduction_fee": { "name": "Non-Winter Reduction Amount" },
+      "cooking_heating_boundary": { "name": "Cooking/Heating Boundary" }
     }
   }
 }

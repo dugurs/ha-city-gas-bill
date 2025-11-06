@@ -19,35 +19,81 @@ http://www.citygas.or.kr/company/situation.jsp
 취사난방경계사용량 을 구하고 (취사난방경계 ÷ 당월열량단가)
 사용량이 취사난방경계사용량 까지는 취사열량단가를 사용, 초과 사용량은 난방열량단가 사용해 계산
 
-##공급사 추가
-코원에너지서비스
 
-###요금단가 스크래핑
-요근단가 월 파라미터 구하기
-https://www.skens.com/koone/rate/guide.do
+
+
+## 공급사 추가
+부산도시가스
+
+### 지역 (regionSeq)
+부산 276
+
+### 중양난방 
+지원
+
+### 열량단가 스크래핑
+
+#### 당월 열량단가
+
+https://www.skens.com/busan/rate/guide.do
+Request Method
+POST
+Payload
+regionSeq=276&seq=0&item-select=3008
+필요data
+xpath
+//*[@id="contents"]/div[4]/table/tbody 중
+td text가 '취사전용'를 찾고 그다음 td가 당월열량단가(취사)
+용도가 주택난방 일 경우
+td text가 '난방전용'를 찾고 그다음 td가 당월열량단가(난방)
+용도가 중앙난방 일 경우
+td text가 '중앙난방'를 찾고 그다음 td가 당월열량단가(난방)
+
+그리고
+전월 단가를 조회 하기 위해
 xpath
 //*[@id="item-select"]
 하위 options 
 text가 년월일
 필요한 년월의 value가 Payload의 item-select에사용.
+<select id="item-select" name="item-select" onchange="javascript:onSearch()">
+<option value="3009" selected="selected">2025-11-01</option>
+<option value="2986">2025-10-01</option>
+<option value="2967">2025-09-01</option>
+<option value="2949">2025-08-01</option>
+<option value="2927">2025-07-01</option>
+<option value="2887">2025-06-01</option>
+<option value="2866">2025-05-01</option>
+<option value="2842">2025-04-01</option>
+<option value="2783">2025-03-01</option>
+<option value="2742">2025-02-01</option>
+</select>
 
-### 지역
-서울 274
-경기 275
-부산 276
-
-### 용도구분
-취사전용
-개별난방
-중앙난방
-
-
-### 지역별 단가
-https://www.skens.com/koone/rate/guide.do
+#### 전월 열량단가
+Request URL
+https://www.skens.com/busan/rate/guide.do
 Request Method
 POST
 Payload
-regionSeq=274&seq=0&item-select=3008
+regionSeq=276&seq=0&item-select=2986
 필요data
 xpath
 //*[@id="contents"]/div[4]/table/tbody 중
+td text가 '취사전용'를 찾고 그다음 td가 당월열량단가(취사)
+용도가 주택난방 일 경우
+td text가 '난방전용'를 찾고 그다음 td가 당월열량단가(난방)
+용도가 중앙난방 일 경우
+td text가 '중앙난방'를 찾고 그다음 td가 당월열량단가(난방)
+
+
+### 평균열량단가
+Request URL
+https://www.skens.com/busan/caloric/call_EBPP_044.do?v=1762404968181
+Request Method
+POST
+Payload
+I_FDATE=20251101&I_TDATE=20251106&I_CALOR=C000
+respones
+{"list":[{"COMPNAME":"부산도시가스","I_FDATE":"20251101","O_FDATE":"20251101","COMPDESC":"부산도시가스","I_CALOR":"C000","O_TDATE":"20251105","I_TDATE":"20251106","E_CALOR":"42.505000"}]}
+필요 data
+E_CALOR

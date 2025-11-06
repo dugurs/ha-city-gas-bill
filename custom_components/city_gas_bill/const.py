@@ -33,6 +33,7 @@ PLATFORMS: Final = [SENSOR, NUMBER, BUTTON]
 # 사용자가 config flow (UI 설정 화면)에서 입력하는 값들의 내부적인 키 이름입니다.
 CONF_PROVIDER: Final = "provider"          # 도시가스 공급사
 CONF_PROVIDER_REGION: Final = "provider_region"  # 공급사 지역 선택을 위한 키
+CONF_USAGE_TYPE: Final = "usage_type"      # 용도 (주택난방, 중앙난방)
 CONF_GAS_SENSOR: Final = "gas_sensor"      # 가스 계량기 센서 엔티티 ID
 CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
 CONF_READING_TIME: Final = "reading_time"  # 일일 정기 검침시간 (HH:MM)
@@ -49,8 +50,10 @@ DEFAULT_BASE_FEE: Final = 1250.0
 # 코디네이터가 웹사이트에서 가져온 데이터를 저장할 때 사용하는 딕셔너리 키입니다.
 DATA_PREV_MONTH_HEAT: Final = "prev_month_heat"    # 전월 평균열량
 DATA_CURR_MONTH_HEAT: Final = "curr_month_heat"    # 당월 평균열량
-DATA_PREV_MONTH_PRICE: Final = "prev_month_price"   # 전월 열량단가
-DATA_CURR_MONTH_PRICE: Final = "curr_month_price"   # 당월 열량단가
+DATA_PREV_MONTH_PRICE_COOKING: Final = "prev_month_price_cooking"   # 전월 열량단가 (취사)
+DATA_PREV_MONTH_PRICE_HEATING: Final = "prev_month_price_heating"   # 전월 열량단가 (난방)
+DATA_CURR_MONTH_PRICE_COOKING: Final = "curr_month_price_cooking"   # 당월 열량단가 (취사)
+DATA_CURR_MONTH_PRICE_HEATING: Final = "curr_month_price_heating"   # 당월 열량단가 (난방)
 
 
 # --- 센서 속성(Attribute) 키 ---
@@ -71,6 +74,11 @@ ATTR_PREV_MONTH_CALCULATED_FEE: Final = "prev_month_calculated_fee"
 ATTR_CURR_MONTH_CALCULATED_FEE: Final = "curr_month_calculated_fee"
 ATTR_PREV_MONTH_REDUCTION_APPLIED: Final = "prev_month_reduction_applied"
 ATTR_CURR_MONTH_REDUCTION_APPLIED: Final = "curr_month_reduction_applied"
+ATTR_COOKING_HEATING_BOUNDARY: Final = "cooking_heating_boundary" # 취사/난방 경계
+ATTR_PREV_MONTH_COOKING_FEE: Final = "prev_month_cooking_fee" # 전월 취사용 요금
+ATTR_PREV_MONTH_HEATING_FEE: Final = "prev_month_heating_fee" # 전월 난방용 요금
+ATTR_CURR_MONTH_COOKING_FEE: Final = "curr_month_cooking_fee" # 당월 취사용 요금
+ATTR_CURR_MONTH_HEATING_FEE: Final = "curr_month_heating_fee" # 당월 난방용 요금
 
 # 격월 센서용 키
 ATTR_PREVIOUS_MONTH: Final = "previous_month"

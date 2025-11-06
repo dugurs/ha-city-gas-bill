@@ -16,7 +16,8 @@ from dateutil.relativedelta import relativedelta
 from .base import GasProvider
 from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
-    DATA_PREV_MONTH_PRICE, DATA_CURR_MONTH_PRICE,
+    DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
+    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,11 @@ class IncheonGasProvider(GasProvider):
     def name(self) -> str:
         """UI에 표시될 공급사 이름을 반환합니다."""
         return "인천도시가스(코원)"
+
+    @property
+    def SUPPORTS_CENTRAL_HEATING(self) -> bool:
+        """인천도시가스는 중앙난방(업무난방) 요금을 지원합니다."""
+        return True
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
         """
@@ -84,9 +90,9 @@ class IncheonGasProvider(GasProvider):
             _LOGGER.error("%s부터 %s까지의 열량 데이터 조회 중 오류 발생: %s", start_date, end_date, err)
             return None
 
-    async def _fetch_price_for_date(self, target_date: date) -> float | None:
+    async def _fetch_price_for_date(self, target_date: date, usage_type_str: str) -> float | None:
         """
-        특정 날짜의 열량단가를 조회하는 내부 헬퍼 함수입니다.
+        특정 날짜와 용도의 열량단가를 조회하는 내부 헬퍼 함수입니다.
         """
         session_id = f"{random.randint(1000, 9999)}_{int(time.time() * 1000)}"
         
@@ -96,9 +102,9 @@ class IncheonGasProvider(GasProvider):
             "c0-methodName": "getChargecost",
             "c0-id": session_id,
             "c0-param0": f"string:{self.region}",
-            "c0-param1": "string:주택취사", # 요금 종류
+            "c0-param1": f"string:{usage_type_str}", # 요금 종류 (예: 주택취사, 주택난방)
             "c0-param2": f"string:{target_date.strftime('%Y-%m-%d')}", # 조회 기준일
-            "c0-param3": "string:주택취사",
+            "c0-param3": f"string:{usage_type_str}",
             "xml": "true",
         }
 
@@ -112,10 +118,10 @@ class IncheonGasProvider(GasProvider):
                 if match:
                     return float(match.group(1))
                 
-                _LOGGER.warning("%s 날짜의 단가 데이터(s6)를 DWR 응답에서 찾지 못했습니다.", target_date)
+                _LOGGER.warning("%s 날짜의 %s 단가 데이터(s6)를 DWR 응답에서 찾지 못했습니다.", target_date, usage_type_str)
                 return None
         except Exception as err:
-            _LOGGER.error("%s 날짜의 단가 조회 중 오류 발생: %s", target_date, err)
+            _LOGGER.error("%s 날짜의 %s 단가 조회 중 오류 발생: %s", target_date, usage_type_str, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -143,14 +149,22 @@ class IncheonGasProvider(GasProvider):
         first_day_curr_month = today.replace(day=1)
         first_day_prev_month = first_day_curr_month - relativedelta(months=1)
 
-        curr_month_price = await self._fetch_price_for_date(first_day_curr_month)
-        prev_month_price = await self._fetch_price_for_date(first_day_prev_month)
+        # 사용자가 선택한 용도에 따라 API에 전달할 난방 요금제 문자열을 결정합니다.
+        # 인천도시가스는 '업무난방'을 중앙난방으로 취급하는 경우가 많습니다.
+        heating_usage_type_str = "업무난방" if self.usage_type == "central" else "주택난방"
 
-        if curr_month_price is not None and prev_month_price is not None:
+        curr_cooking = await self._fetch_price_for_date(first_day_curr_month, "주택취사")
+        prev_cooking = await self._fetch_price_for_date(first_day_prev_month, "주택취사")
+        curr_heating = await self._fetch_price_for_date(first_day_curr_month, heating_usage_type_str)
+        prev_heating = await self._fetch_price_for_date(first_day_prev_month, heating_usage_type_str)
+        
+        if all(p is not None for p in [curr_cooking, prev_cooking, curr_heating, prev_heating]):
             return {
-                DATA_CURR_MONTH_PRICE: curr_month_price,
-                DATA_PREV_MONTH_PRICE: prev_month_price,
+                DATA_CURR_MONTH_PRICE_COOKING: curr_cooking,
+                DATA_PREV_MONTH_PRICE_COOKING: prev_cooking,
+                DATA_CURR_MONTH_PRICE_HEATING: curr_heating,
+                DATA_PREV_MONTH_PRICE_HEATING: prev_heating,
             }
         
-        _LOGGER.error("인천도시가스의 단가 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        _LOGGER.error("인천도시가스의 취사/난방 단가 데이터를 모두 가져오지 못했습니다.")
         return None

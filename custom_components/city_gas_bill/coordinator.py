@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.helpers.aiohttp_client import async_create_clientsession  # HA에서 권장하는 aiohttp 세션 생성 헬퍼
 from homeassistant.util import dt as dt_util  # 날짜 및 시간 관련 유틸리티
 
-from .const import DOMAIN, LOGGER, CONF_PROVIDER, CONF_PROVIDER_REGION
+from .const import DOMAIN, LOGGER, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_USAGE_TYPE
 from .providers import AVAILABLE_PROVIDERS  # 사용 가능한 모든 공급사 목록
 from .providers.base import GasProvider  # 공급사의 기본 클래스
 
@@ -37,8 +37,9 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
         # 없으면 최초 설정 시 입력한 '데이터'를 사용합니다.
         config = self.config_entry.options or self.config_entry.data
         provider_key = config[CONF_PROVIDER]  # 예: 'seoul_gas', 'incheon_gas'
-        # 설정에서 지역 코드(region code)를 가져옵니다.
-        provider_region = config[CONF_PROVIDER_REGION]
+        # 설정에서 지역 코드(region code)와 용도(usage type)를 가져옵니다.
+        provider_region = config.get(CONF_PROVIDER_REGION)
+        usage_type = config.get(CONF_USAGE_TYPE)
 
         # 사용자가 선택한 공급사 키를 바탕으로 실제 공급사 클래스를 가져옵니다.
         provider_class = AVAILABLE_PROVIDERS.get(provider_key)
@@ -46,8 +47,12 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
             # 만약 알 수 없는 공급사가 선택되면, 설정 오류를 발생시킵니다.
             raise ConfigEntryError(f"'{provider_key}' 공급사를 찾을 수 없습니다.")
         
-        # 선택된 공급사 클래스의 인스턴스를 생성하고 웹 세션을 전달합니다.
-        self.provider: GasProvider = provider_class(self.websession, region=provider_region)
+        # 선택된 공급사 클래스의 인스턴스를 생성하고 웹 세션, 지역, 용도 정보를 전달합니다.
+        self.provider: GasProvider = provider_class(
+            self.websession,
+            region=provider_region,
+            usage_type=usage_type
+        )
 
         # 마지막으로 데이터 업데이트에 성공한 시간을 기록하기 위한 변수입니다.
         self.last_update_success_timestamp = None

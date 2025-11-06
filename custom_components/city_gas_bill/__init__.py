@@ -13,7 +13,8 @@ from .const import (
     PLATFORMS, 
     LOGGER,
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
-    DATA_PREV_MONTH_PRICE, DATA_CURR_MONTH_PRICE
+    DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
+    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING
 )
 from .coordinator import CityGasDataUpdateCoordinator
 
@@ -54,8 +55,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         key_to_unique_id_map = {
             DATA_PREV_MONTH_HEAT: f"{entry.entry_id}_prev_month_heat",
             DATA_CURR_MONTH_HEAT: f"{entry.entry_id}_curr_month_heat",
-            DATA_PREV_MONTH_PRICE: f"{entry.entry_id}_prev_month_price",
-            DATA_CURR_MONTH_PRICE: f"{entry.entry_id}_curr_month_price",
+            DATA_PREV_MONTH_PRICE_COOKING: f"{entry.entry_id}_prev_month_price_cooking",
+            DATA_PREV_MONTH_PRICE_HEATING: f"{entry.entry_id}_prev_month_price_heating",
+            DATA_CURR_MONTH_PRICE_COOKING: f"{entry.entry_id}_curr_month_price_cooking",
+            DATA_CURR_MONTH_PRICE_HEATING: f"{entry.entry_id}_curr_month_price_heating",
         }
 
         # 각 항목에 대해 Number 엔티티의 값을 업데이트하는 서비스 콜을 실행합니다.

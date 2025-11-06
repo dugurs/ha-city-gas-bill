@@ -15,7 +15,8 @@ from .base import GasProvider  # base.py에 정의된 부모 클래스를 가져
 from ..const import (
     # const.py에 정의된 데이터 키들을 가져와서 일관성을 유지합니다.
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
-    DATA_PREV_MONTH_PRICE, DATA_CURR_MONTH_PRICE,
+    DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
+    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,6 +40,11 @@ class SeoulGasProvider(GasProvider):
     def name(self) -> str:
         """UI에 표시될 공급사 이름을 반환합니다."""
         return "서울도시가스"
+        
+    @property
+    def SUPPORTS_CENTRAL_HEATING(self) -> bool:
+        """서울도시가스는 중앙난방 요금을 지원하지 않습니다."""
+        return False
 
     def _parse_heat_from_html(self, html_content: str, month_label: str) -> str | None:
         """
@@ -110,38 +116,65 @@ class SeoulGasProvider(GasProvider):
 
     async def scrape_price_data(self) -> dict[str, float] | None:
         """
-        서울도시가스 웹사이트의 요금표에서 전월 및 당월의 열량단가(주택취사용)를 스크래핑합니다.
+        서울도시가스 웹사이트의 요금표에서 전월 및 당월의 열량단가를 스크래핑합니다.
+        테이블의 첫 두 행을 직접 참조하여 안정성을 높인 로직입니다.
         """
         if not self.region:
             _LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
             return None
         try:
-            # 요청에 사용할 Payload를 생성합니다.
             payload = {"gaspayArea": self.region}
             _LOGGER.debug("서울도시가스 열량단가 조회 요청 (지역: %s), Payload: %s", self.region, payload)
-            # 요금표 페이지에 GET 요청을 보냅니다.
+            
             async with self.websession.post(self.URL_PRICE, data=payload) as response:
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
                 
-                # 요금표가 들어있는 테이블을 찾습니다.
                 table = soup.select_one(".tblgas > table")
-                if not table: return None
+                if not table:
+                    _LOGGER.error("서울도시가스 요금표 테이블을 찾지 못했습니다.")
+                    return None
                 
-                # 테이블의 모든 헤더 셀(<th>)을 순회합니다.
-                for th in table.find_all("th"):
-                    # "취사"라는 단어가 포함된 헤더(주택취사용 요금 행)를 찾습니다.
-                    if "취사" in th.get_text():
-                        # 해당 헤더와 같은 행에 있는 모든 데이터 셀(<td>)들을 가져옵니다.
-                        tds = th.find_next_siblings("td")
-                        # 데이터 셀이 2개 이상(전월단가, 당월단가) 있는지 확인합니다.
-                        if len(tds) >= 2:
-                            # 각 셀의 텍스트에서 공백을 제거하고 float으로 변환하여 반환합니다.
-                            return {
-                                DATA_PREV_MONTH_PRICE: float(tds[0].get_text(strip=True)),
-                                DATA_CURR_MONTH_PRICE: float(tds[1].get_text(strip=True))
-                            }
-                return None # "취사" 행을 찾지 못하면 None 반환
+                # 테이블 본문(tbody)에서 모든 행(tr)을 가져옵니다.
+                rows = table.select("tbody tr")
+                
+                # 최소 2개의 행이 있는지 확인합니다 (취사용, 난방용).
+                if len(rows) < 2:
+                    _LOGGER.error("서울도시가스 요금표에서 필요한 행(2개 이상)을 찾지 못했습니다.")
+                    return None
+
+                # 첫 번째 행(취사용)에서 td들을 가져옵니다.
+                tds_cooking = rows[0].find_all("td")
+                if len(tds_cooking) < 2:
+                    _LOGGER.error("취사 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
+                    return None
+                
+                # 두 번째 행(난방용)에서 td들을 가져옵니다.
+                tds_heating = rows[1].find_all("td")
+                if len(tds_heating) < 2:
+                    _LOGGER.error("난방 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
+                    return None
+                    
+                # 각 셀의 텍스트를 숫자로 변환합니다.
+                try:
+                    # 첫 번째 행: 취사용 단가
+                    prev_price_cooking = float(tds_cooking[0].get_text(strip=True))
+                    curr_price_cooking = float(tds_cooking[1].get_text(strip=True))
+                    
+                    # 두 번째 행: 난방용 단가
+                    prev_price_heating = float(tds_heating[0].get_text(strip=True))
+                    curr_price_heating = float(tds_heating[1].get_text(strip=True))
+                except (ValueError, TypeError) as e:
+                    _LOGGER.error("요금표의 숫자 값을 변환하는 중 오류가 발생했습니다: %s", e)
+                    return None
+
+                # 최종 결과를 딕셔너리 형태로 반환합니다.
+                return {
+                    DATA_PREV_MONTH_PRICE_COOKING: prev_price_cooking,
+                    DATA_CURR_MONTH_PRICE_COOKING: curr_price_cooking,
+                    DATA_PREV_MONTH_PRICE_HEATING: prev_price_heating,
+                    DATA_CURR_MONTH_PRICE_HEATING: curr_price_heating,
+                }
         except Exception as err:
             _LOGGER.error("서울도시가스 열량단가 데이터 스크래핑 중 오류 발생: %s", err)
             return None

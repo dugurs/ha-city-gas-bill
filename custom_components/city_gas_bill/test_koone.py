@@ -1,4 +1,4 @@
-# custom_components/city_gas_bill/test_provider_get.py (최종 수정 버전)
+# custom_components/city_gas_bill/test_koone.py
 
 import asyncio
 import aiohttp
@@ -30,16 +30,16 @@ parent_dir = script_dir.parent
 sys.path.insert(0, str(parent_dir))
 
 # [3. 임포트]
-from city_gas_bill.providers.yesco_gas import YescoGasProvider
-from city_gas_bill.const import (
-    DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
-    DATA_PREV_MONTH_PRICE, DATA_CURR_MONTH_PRICE,
-)
+# 테스트할 공급사로 KooneGasProvider를 임포트합니다.
+from city_gas_bill.providers.koone_gas import KooneGasProvider
+
 # --- 설정 끝 ---
 
 
-# --- 테스트할 지역 설정 ---
-TEST_REGION = "1"  # "1": 서울, "8": 경기
+# --- 테스트할 지역 및 용도 설정 ---
+TEST_REGION = "274"  # 코원에너지서비스 기준 -> "274": 서울, "275": 경기
+# 코원에너지서비스는 주택난방만 지원하므로 'residential'로 고정합니다.
+TEST_USAGE_TYPE = "residential"
 # ---
 
 
@@ -49,14 +49,19 @@ async def main():
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'
     )
-    logging.info(f"예스코 프로바이더 로컬 테스트를 시작합니다. (테스트 지역 코드: {TEST_REGION})")
+    logging.info(f"코원에너지서비스 프로바이더 로컬 테스트를 시작합니다.")
+    logging.info(f"(테스트 지역 코드: {TEST_REGION}, 테스트 용도: {TEST_USAGE_TYPE})")
 
-    # [수정] aiohttp에서 SSL 검증을 비활성화하는 올바른 방법입니다.
-    # 1. SSL 검증을 비활성화하는 TCPConnector를 생성합니다.
+    # aiohttp에서 SSL 검증을 비활성화하는 TCPConnector를 생성합니다.
     connector = aiohttp.TCPConnector(ssl=False)
-    # 2. 생성한 connector를 ClientSession에 전달합니다.
+    
     async with aiohttp.ClientSession(connector=connector) as session:
-        provider = YescoGasProvider(websession=session, region=TEST_REGION)
+        # KooneGasProvider 클래스를 초기화할 때 웹세션, 지역, 용도 정보를 전달합니다.
+        provider = KooneGasProvider(
+            websession=session, 
+            region=TEST_REGION, 
+            usage_type=TEST_USAGE_TYPE
+        )
 
         # 1. 평균열량 데이터 스크래핑 테스트
         try:
@@ -84,4 +89,17 @@ async def main():
 
 
 if __name__ == "__main__":
+    # 필요한 라이브러리가 설치되어 있는지 확인합니다.
+    try:
+        import aiohttp
+        import bs4
+        from dateutil.relativedelta import relativedelta
+    except ImportError:
+        print("="*50)
+        print("오류: 테스트에 필요한 라이브러리가 설치되지 않았습니다.")
+        print("아래 명령어를 실행하여 라이브러리를 설치해주세요.")
+        print("pip install aiohttp beautifulsoup4 python-dateutil")
+        print("="*50)
+        sys.exit(1)
+        
     asyncio.run(main())

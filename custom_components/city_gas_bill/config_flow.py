@@ -14,7 +14,10 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectOptionDict
 
-from .const import DOMAIN, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE
+from .const import (
+    DOMAIN, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_GAS_SENSOR,
+    CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE, CONF_USAGE_TYPE
+)
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
 def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
@@ -54,6 +57,12 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         SelectOptionDict(value="even", label="격월 - 짝수월"),
     ]
 
+    # '용도' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
+    usage_type_options = [
+        SelectOptionDict(value="residential", label="주택난방"),
+        SelectOptionDict(value="central", label="중앙난방"),
+    ]
+
     # 공급사 선택기의 default 값 설정 방식 변경
     # 저장된 provider와 region 코드를 조합하여 'provider_id|region_code' 형태로 만들어야 함
     default_provider_selection = current_config.get(CONF_PROVIDER)
@@ -70,6 +79,17 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
             selector.SelectSelectorConfig(
                 options=provider_options,
                 mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        # '가스 용도' 필드 (드롭다운 메뉴)
+        vol.Required(
+            CONF_USAGE_TYPE,
+            default=current_config.get(CONF_USAGE_TYPE, "residential"), # 기본값은 '주택난방'
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=usage_type_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_USAGE_TYPE
             )
         ),
         # '가스 사용량 센서' 필드 (엔티티 선택 도우미)
@@ -145,16 +165,30 @@ class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
             # 이미 있다면, 중복 추가가 불가능하다는 메시지와 함께 설정을 중단합니다.
             return self.async_abort(reason="single_instance_allowed")
         
+        errors = {} # 에러 메시지를 담을 딕셔너리
+        
         # 사용자가 폼을 채우고 '제출' 버튼을 눌렀다면 user_input에 값이 들어옵니다.
         if user_input is not None:
-            # 입력받은 설정값을 사용하여 새로운 설정 엔트리(ConfigEntry)를 생성하고 설정을 완료합니다.
-            # 사용자가 제출한 값을 파싱하여 data에 저장
-            data = _parse_provider_input(user_input)
-            return self.async_create_entry(title="City Gas Bill", data=data)
+            # 사용자가 선택한 공급사와 용도를 확인하여 유효성을 검증합니다.
+            provider_selection = user_input[CONF_PROVIDER]
+            provider_id = provider_selection.split('|')[0]
+            usage_type = user_input[CONF_USAGE_TYPE]
+            
+            provider_class = AVAILABLE_PROVIDERS.get(provider_id)
+            # 공급사 클래스가 존재하고, 사용자가 '중앙난방'을 선택했지만 공급사가 지원하지 않는 경우 오류 처리
+            if provider_class and usage_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+                errors["base"] = "central_heating_not_supported"
+            else:
+                # 유효성 검사를 통과하면 새로운 설정 엔트리(ConfigEntry)를 생성하고 설정을 완료합니다.
+                data = _parse_provider_input(user_input)
+                return self.async_create_entry(title="City Gas Bill", data=data)
         
-        # user_input이 None이면, 사용자에게 설정 폼을 처음 보여주는 단계입니다.
-        # _get_data_schema()를 호출하여 생성된 폼을 사용자에게 표시합니다.
-        return self.async_show_form(step_id="user", data_schema=_get_data_schema())
+        # user_input이 None이거나 유효성 검증에 실패한 경우, 사용자에게 설정 폼을 보여줍니다.
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_get_data_schema(),
+            errors=errors # 에러 메시지를 폼에 전달
+        )
 
 class CityGasBillOptionsFlowHandler(OptionsFlow):
     """
@@ -166,12 +200,21 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """'init' 단계의 옵션 설정 과정을 관리합니다."""
+        errors = {}
         # 사용자가 옵션 변경 폼을 제출했다면 user_input에 값이 들어옵니다.
         if user_input is not None:
-            # 빈 title과 함께 엔트리를 생성하여 기존 옵션을 업데이트하고 완료합니다.
-            # 옵션 변경 시에도 동일하게 파싱 로직 적용
-            data = _parse_provider_input(user_input)
-            return self.async_create_entry(title="", data=data)
+            # 설정값 유효성 검증
+            provider_selection = user_input[CONF_PROVIDER]
+            provider_id = provider_selection.split('|')[0]
+            usage_type = user_input[CONF_USAGE_TYPE]
+            
+            provider_class = AVAILABLE_PROVIDERS.get(provider_id)
+            if provider_class and usage_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+                errors["base"] = "central_heating_not_supported"
+            else:
+                # 유효성 검증 통과 시, 기존 옵션을 업데이트하고 완료합니다.
+                data = _parse_provider_input(user_input)
+                return self.async_create_entry(title="", data=data)
 
         # 현재 저장된 설정값(옵션 또는 최초 데이터)을 가져옵니다.
         current_config = self.config_entry.options or self.config_entry.data
@@ -180,4 +223,5 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=_get_data_schema(current_config),
+            errors=errors
         )

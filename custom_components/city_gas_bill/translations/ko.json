@@ -7,12 +7,16 @@
         "description": "요금 계산을 위한 도시가스 공급사, 가스 계량기 센서, 월 정기 검침일 등을 선택해주세요.",
         "data": {
           "provider": "도시가스 공급사",
+          "usage_type": "가스 용도",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "일일 정기 검침시간 (HH:MM)",
           "bimonthly_cycle": "검침 주기"
         }
       }
+    },
+    "error": {
+      "central_heating_not_supported": "선택하신 공급사는 중앙난방 요금제를 지원하지 않습니다."
     },
     "abort": {
       "single_instance_allowed": "이미 설정된 도시가스 요금 통합구성요소가 있습니다. 하나만 추가할 수 있습니다."
@@ -25,12 +29,16 @@
         "description": "요금 계산에 사용될 공급사, 가스 센서 또는 검침 주기 등을 변경합니다.",
         "data": {
           "provider": "도시가스 공급사",
+          "usage_type": "가스 용도",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "월 정기 검침시간 (HH:MM)",
           "bimonthly_cycle": "검침 주기"
         }
       }
+    },
+    "error": {
+      "central_heating_not_supported": "선택하신 공급사는 중앙난방 요금제를 지원하지 않습니다."
     }
   },
   "entity": {
@@ -55,11 +63,14 @@
       "monthly_start_reading": { "name": "월검침시작값" },
       "prev_month_heat": { "name": "전월 평균열량" },
       "curr_month_heat": { "name": "당월 평균열량" },
-      "prev_month_price": { "name": "전월 열량단가" },
-      "curr_month_price": { "name": "당월 열량단가" },
+      "prev_month_price_cooking": { "name": "전월 열량단가(취사)" },
+      "prev_month_price_heating": { "name": "전월 열량단가(난방)" },
+      "curr_month_price_cooking": { "name": "당월 열량단가(취사)" },
+      "curr_month_price_heating": { "name": "당월 열량단가(난방)" },
       "correction_factor": { "name": "온압보정계수" },
       "winter_reduction_fee": { "name": "동절기 경감액" },
-      "non_winter_reduction_fee": { "name": "동절기외 경감액" }
+      "non_winter_reduction_fee": { "name": "동절기외 경감액" },
+      "cooking_heating_boundary": { "name": "취사난방경계" }
     }
   }
 }

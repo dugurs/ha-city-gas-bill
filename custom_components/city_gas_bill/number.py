@@ -42,11 +42,14 @@ async def async_setup_entry(
         MonthlyStartReadingNumber(hass, entry, device_info),
         PrevMonthHeatNumber(entry, device_info),
         CurrMonthHeatNumber(entry, device_info),
-        PrevMonthPriceNumber(entry, device_info),
-        CurrMonthPriceNumber(entry, device_info),
+        PrevMonthPriceCookingNumber(entry, device_info),
+        PrevMonthPriceHeatingNumber(entry, device_info),
+        CurrMonthPriceCookingNumber(entry, device_info),
+        CurrMonthPriceHeatingNumber(entry, device_info),
         CorrectionFactorNumber(entry, device_info),
         WinterReductionFeeNumber(entry, device_info),
         NonWinterReductionFeeNumber(entry, device_info),
+        CookingHeatingBoundaryNumber(entry, device_info),
     ])
 
 class RestorableNumberEntity(NumberEntity, RestoreEntity):
@@ -114,18 +117,36 @@ class CurrMonthHeatNumber(RestorableNumberEntity):
     def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
         super().__init__(entry, device_info, default_value=43.0)
 
-class PrevMonthPriceNumber(RestorableNumberEntity):
-    """지난달 열량단가 엔티티입니다."""
-    _attr_translation_key = "prev_month_price"
+class PrevMonthPriceCookingNumber(RestorableNumberEntity):
+    """지난달 열량단가(취사) 엔티티입니다."""
+    _attr_translation_key = "prev_month_price_cooking"
     _attr_icon = "mdi:cash-minus"
     _attr_native_unit_of_measurement = "KRW/MJ"
     _attr_native_min_value = 0.0; _attr_native_max_value = 100.0; _attr_native_step = 0.0001
     def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
         super().__init__(entry, device_info, default_value=22.3)
 
-class CurrMonthPriceNumber(RestorableNumberEntity):
-    """이번 달 열량단가 엔티티입니다."""
-    _attr_translation_key = "curr_month_price"
+class PrevMonthPriceHeatingNumber(RestorableNumberEntity):
+    """지난달 열량단가(난방) 엔티티입니다."""
+    _attr_translation_key = "prev_month_price_heating"
+    _attr_icon = "mdi:cash-minus"
+    _attr_native_unit_of_measurement = "KRW/MJ"
+    _attr_native_min_value = 0.0; _attr_native_max_value = 100.0; _attr_native_step = 0.0001
+    def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        super().__init__(entry, device_info, default_value=22.3)
+
+class CurrMonthPriceCookingNumber(RestorableNumberEntity):
+    """이번 달 열량단가(취사) 엔티티입니다."""
+    _attr_translation_key = "curr_month_price_cooking"
+    _attr_icon = "mdi:cash"
+    _attr_native_unit_of_measurement = "KRW/MJ"
+    _attr_native_min_value = 0.0; _attr_native_max_value = 100.0; _attr_native_step = 0.0001
+    def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        super().__init__(entry, device_info, default_value=22.3)
+
+class CurrMonthPriceHeatingNumber(RestorableNumberEntity):
+    """이번 달 열량단가(난방) 엔티티입니다."""
+    _attr_translation_key = "curr_month_price_heating"
     _attr_icon = "mdi:cash"
     _attr_native_unit_of_measurement = "KRW/MJ"
     _attr_native_min_value = 0.0; _attr_native_max_value = 100.0; _attr_native_step = 0.0001
@@ -156,6 +177,15 @@ class NonWinterReductionFeeNumber(RestorableNumberEntity):
     _attr_icon = "mdi:weather-sunny"
     _attr_native_unit_of_measurement = "KRW"
     _attr_native_min_value = 0; _attr_native_max_value = 1000000; _attr_native_step = 1.0
+    def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        super().__init__(entry, device_info, default_value=0.0)
+
+class CookingHeatingBoundaryNumber(RestorableNumberEntity):
+    """취사/난방 요금 경계를 위한 엔티티입니다."""
+    _attr_translation_key = "cooking_heating_boundary"
+    _attr_icon = "mdi:stove"
+    _attr_native_unit_of_measurement = "MJ"
+    _attr_native_min_value = 0; _attr_native_max_value = 5000; _attr_native_step = 1.0
     def __init__(self, entry: ConfigEntry, device_info: DeviceInfo) -> None:
         super().__init__(entry, device_info, default_value=0.0)
 

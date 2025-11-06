@@ -6,7 +6,7 @@
 from __future__ import annotations
 from datetime import date, timedelta
 import logging
-from typing import Final # Final 임포트
+from typing import Final, Dict, Optional
 
 import aiohttp
 from dateutil.relativedelta import relativedelta
@@ -14,7 +14,8 @@ from dateutil.relativedelta import relativedelta
 from .base import GasProvider
 from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
-    DATA_PREV_MONTH_PRICE, DATA_CURR_MONTH_PRICE,
+    DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
+    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,20 +26,16 @@ class YescoGasProvider(GasProvider):
     """
     API_URL = "https://www.lsyesco.com/Common/connApiServer.do"
 
-    # [추가] 이 공급사가 지원하는 지역 목록을 정의합니다.
-    # config_flow.py에서 이 정보를 사용하여 동적으로 UI 옵션을 생성합니다.
-    # key: API 호출에 사용할 지역 코드, value: UI에 표시될 이름
     REGIONS: Final = {
         "1": "서울",
         "8": "경기",
     }
     
-    # __init__ 메소드에서 지역(region) 코드를 받도록 수정합니다.
-    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None):
+    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None, usage_type: str | None = None):
         """
-        공급사를 초기화하고, 선택된 지역 코드를 저장합니다.
+        공급사를 초기화하고, 선택된 지역 코드와 용도를 저장합니다.
         """
-        super().__init__(websession, region=region)
+        super().__init__(websession, region=region, usage_type=usage_type)
 
     @property
     def id(self) -> str:
@@ -50,11 +47,15 @@ class YescoGasProvider(GasProvider):
         """UI에 표시될 공급사 기본 이름을 반환합니다."""
         return "예스코"
 
-    async def _fetch_price_for_month(self, target_date: date) -> float | None:
+    @property
+    def SUPPORTS_CENTRAL_HEATING(self) -> bool:
+        """예스코는 중앙난방 요금을 지원하지 않습니다."""
+        return False
+
+    async def _fetch_price_for_month(self, target_date: date) -> Optional[Dict[str, float]]:
         """
-        특정 월의 '주택취사' 열량단가를 조회하는 내부 헬퍼 함수입니다.
+        특정 월의 '주택취사' 및 '주택난방' 열량단가를 조회하는 내부 헬퍼 함수입니다.
         """
-        # [수정] 지역 코드가 설정되지 않았으면 오류를 로깅하고 중단합니다.
         if not self.region:
             _LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
             return None
@@ -67,13 +68,20 @@ class YescoGasProvider(GasProvider):
                 data = await response.json()
 
                 if data.get("success"):
+                    prices = {}
+                    
                     for item in data["data"]["Tables"]["ITAB"]["tableMap"]:
-                        # self.region을 사용하여 올바른 지역의 단가를 찾습니다.
-                        if item.get("TYPENAME") == "주택취사" and item.get("CITYCD") == self.region:
-                            _LOGGER.debug("예스코 %s 지역(%s)의 주택취사 단가 %s를 찾았습니다.", 
-                                          self.REGIONS.get(self.region, "알수없음"), self.region, item["AMOUNT_PERC"])
-                            return float(item["AMOUNT_PERC"])
-                    _LOGGER.warning("%s 날짜의 주택취사 단가 데이터를 찾지 못했습니다. (지역코드: %s)", target_date, self.region)
+                        if item.get("CITYCD") == self.region:
+                            item_type = item.get("TYPENAME")
+                            if item_type == "주택취사":
+                                prices['cooking'] = float(item["AMOUNT_PERC"])
+                            elif item_type == "주택난방":
+                                prices['heating'] = float(item["AMOUNT_PERC"])
+                    
+                    if 'cooking' in prices and 'heating' in prices:
+                        return prices
+                    
+                    _LOGGER.warning("%s 날짜의 주택취사/주택난방 단가 데이터를 모두 찾지 못했습니다. (지역코드: %s)", target_date, self.region)
                 else:
                     _LOGGER.error("예스코 열량단가 API에서 오류 응답: %s", data.get("message"))
                 
@@ -84,7 +92,7 @@ class YescoGasProvider(GasProvider):
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
         """
-        특정 기간의 평균열량을 조회합니다. (열량은 지역과 무관하므로 수정 없음)
+        특정 기간의 평균열량을 조회합니다.
         """
         payload = {
             "id": "E0005",
@@ -131,13 +139,15 @@ class YescoGasProvider(GasProvider):
         first_day_curr_month = today.replace(day=1)
         first_day_prev_month = first_day_curr_month - relativedelta(months=1)
 
-        curr_month_price = await self._fetch_price_for_month(first_day_curr_month)
-        prev_month_price = await self._fetch_price_for_month(first_day_prev_month)
+        curr_prices = await self._fetch_price_for_month(first_day_curr_month)
+        prev_prices = await self._fetch_price_for_month(first_day_prev_month)
 
-        if curr_month_price is not None and prev_month_price is not None:
+        if curr_prices and prev_prices:
             return {
-                DATA_CURR_MONTH_PRICE: curr_month_price,
-                DATA_PREV_MONTH_PRICE: prev_month_price,
+                DATA_CURR_MONTH_PRICE_COOKING: curr_prices['cooking'],
+                DATA_CURR_MONTH_PRICE_HEATING: curr_prices['heating'],
+                DATA_PREV_MONTH_PRICE_COOKING: prev_prices['cooking'],
+                DATA_PREV_MONTH_PRICE_HEATING: prev_prices['heating'],
             }
         
         _LOGGER.error("예스코의 열량단가 데이터를 하나 또는 모두 가져오지 못했습니다.")

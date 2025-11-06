@@ -33,7 +33,9 @@ from .const import (
     ATTR_PREV_MONTH_CALCULATED_FEE, ATTR_CURR_MONTH_CALCULATED_FEE,
     ATTR_PREV_MONTH_REDUCTION_APPLIED, ATTR_CURR_MONTH_REDUCTION_APPLIED,
     ATTR_PREVIOUS_MONTH, ATTR_CURRENT_MONTH, ATTR_PREVIOUS_MONTH_ACTUAL,
-    ATTR_CURRENT_MONTH_ESTIMATED, ATTR_USAGE_PREVIOUS_MONTH, ATTR_USAGE_CURRENT_MONTH
+    ATTR_CURRENT_MONTH_ESTIMATED, ATTR_USAGE_PREVIOUS_MONTH, ATTR_USAGE_CURRENT_MONTH,
+    ATTR_COOKING_HEATING_BOUNDARY, ATTR_PREV_MONTH_COOKING_FEE, ATTR_PREV_MONTH_HEATING_FEE,
+    ATTR_CURR_MONTH_COOKING_FEE, ATTR_CURR_MONTH_HEATING_FEE
 )
 from .coordinator import CityGasDataUpdateCoordinator
 from .billing import GasBillCalculator
@@ -64,11 +66,14 @@ class BillConfigInputs(NamedTuple):
     base_fee: float
     prev_heat: float
     curr_heat: float
-    prev_price: float
-    curr_price: float
+    prev_price_cooking: float
+    prev_price_heating: float
+    curr_price_cooking: float
+    curr_price_heating: float
     correction_factor: float
     winter_reduction_fee: float
     non_winter_reduction_fee: float
+    cooking_heating_boundary: float
 
 def _get_state_as_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
     """엔티티 ID로 상태를 가져와 float으로 변환하는 공용 헬퍼 함수."""
@@ -88,8 +93,9 @@ def _get_bill_config_inputs(hass: HomeAssistant, number_ids: dict) -> BillConfig
     이 함수는 여러 센서에서 재사용됩니다.
     """
     keys = [
-        "base_fee", "prev_heat", "curr_heat", "prev_price", "curr_price", 
-        "correction_factor", "winter_reduction_fee", "non_winter_reduction_fee"
+        "base_fee", "prev_heat", "curr_heat", "prev_price_cooking", "prev_price_heating",
+        "curr_price_cooking", "curr_price_heating", "correction_factor", 
+        "winter_reduction_fee", "non_winter_reduction_fee", "cooking_heating_boundary"
     ]
     
     values = [_get_state_as_float(hass, number_ids.get(key)) for key in keys]
@@ -124,11 +130,14 @@ async def async_setup_entry(
         "base_fee": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_base_fee"),
         "prev_heat": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_prev_month_heat"),
         "curr_heat": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_curr_month_heat"),
-        "prev_price": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_prev_month_price"),
-        "curr_price": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_curr_month_price"),
+        "prev_price_cooking": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_prev_month_price_cooking"),
+        "prev_price_heating": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_prev_month_price_heating"),
+        "curr_price_cooking": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_curr_month_price_cooking"),
+        "curr_price_heating": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_curr_month_price_heating"),
         "correction_factor": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_correction_factor"),
         "winter_reduction_fee": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_winter_reduction_fee"),
         "non_winter_reduction_fee": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_non_winter_reduction_fee"),
+        "cooking_heating_boundary": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cooking_heating_boundary"),
     }
     
     # 의존성 주입을 위한 각 센서의 고유 ID 정의
@@ -258,8 +267,11 @@ class TotalBillSensor(SensorEntity):
                     base_fee=config_inputs.base_fee,
                     prev_heat=config_inputs.prev_heat,
                     curr_heat=config_inputs.curr_heat,
-                    prev_price=config_inputs.prev_price,
-                    curr_price=config_inputs.curr_price,
+                    prev_price_cooking=config_inputs.prev_price_cooking,
+                    prev_price_heating=config_inputs.prev_price_heating,
+                    curr_price_cooking=config_inputs.curr_price_cooking,
+                    curr_price_heating=config_inputs.curr_price_heating,
+                    cooking_heating_boundary=config_inputs.cooking_heating_boundary,
                     winter_reduction_fee=config_inputs.winter_reduction_fee,
                     non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
                     today=today,
@@ -279,6 +291,11 @@ class TotalBillSensor(SensorEntity):
                     ATTR_CURR_MONTH_CALCULATED_FEE: attrs_int.get("curr_month_calculated_fee"),
                     ATTR_PREV_MONTH_REDUCTION_APPLIED: attrs_int.get("prev_month_reduction_applied"),
                     ATTR_CURR_MONTH_REDUCTION_APPLIED: attrs_int.get("curr_month_reduction_applied"),
+                    ATTR_COOKING_HEATING_BOUNDARY: attrs_int.get("cooking_heating_boundary"),
+                    ATTR_PREV_MONTH_COOKING_FEE: attrs_int.get("prev_month_cooking_fee"),
+                    ATTR_PREV_MONTH_HEATING_FEE: attrs_int.get("prev_month_heating_fee"),
+                    ATTR_CURR_MONTH_COOKING_FEE: attrs_int.get("curr_month_cooking_fee"),
+                    ATTR_CURR_MONTH_HEATING_FEE: attrs_int.get("curr_month_heating_fee"),
                 }
             else:
                 LOGGER.debug("정수 사용량 기반 전월요금 재계산에 실패하여 기존 값을 사용합니다.")
@@ -313,8 +330,11 @@ class TotalBillSensor(SensorEntity):
             base_fee=config_inputs.base_fee,
             prev_heat=config_inputs.prev_heat,
             curr_heat=config_inputs.curr_heat,
-            prev_price=config_inputs.prev_price,
-            curr_price=config_inputs.curr_price,
+            prev_price_cooking=config_inputs.prev_price_cooking,
+            prev_price_heating=config_inputs.prev_price_heating,
+            curr_price_cooking=config_inputs.curr_price_cooking,
+            curr_price_heating=config_inputs.curr_price_heating,
+            cooking_heating_boundary=config_inputs.cooking_heating_boundary,
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
             today=today,
@@ -334,6 +354,11 @@ class TotalBillSensor(SensorEntity):
             ATTR_CURR_MONTH_CALCULATED_FEE: attrs.get("curr_month_calculated_fee"),
             ATTR_PREV_MONTH_REDUCTION_APPLIED: attrs.get("prev_month_reduction_applied"),
             ATTR_CURR_MONTH_REDUCTION_APPLIED: attrs.get("curr_month_reduction_applied"),
+            ATTR_COOKING_HEATING_BOUNDARY: attrs.get("cooking_heating_boundary"),
+            ATTR_PREV_MONTH_COOKING_FEE: attrs.get("prev_month_cooking_fee"),
+            ATTR_PREV_MONTH_HEATING_FEE: attrs.get("prev_month_heating_fee"),
+            ATTR_CURR_MONTH_COOKING_FEE: attrs.get("curr_month_cooking_fee"),
+            ATTR_CURR_MONTH_HEATING_FEE: attrs.get("curr_month_heating_fee"),
         }
 
 class EstimatedUsageSensor(SensorEntity):
@@ -434,8 +459,11 @@ class EstimatedBillSensor(SensorEntity):
             base_fee=config_inputs.base_fee,
             prev_heat=config_inputs.prev_heat,
             curr_heat=config_inputs.curr_heat,
-            prev_price=config_inputs.prev_price,
-            curr_price=config_inputs.curr_price,
+            prev_price_cooking=config_inputs.prev_price_cooking,
+            prev_price_heating=config_inputs.prev_price_heating,
+            curr_price_cooking=config_inputs.curr_price_cooking,
+            curr_price_heating=config_inputs.curr_price_heating,
+            cooking_heating_boundary=config_inputs.cooking_heating_boundary,
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
             today=next_reading_day,
@@ -456,6 +484,11 @@ class EstimatedBillSensor(SensorEntity):
             ATTR_CURR_MONTH_CALCULATED_FEE: attrs.get("curr_month_calculated_fee"),
             ATTR_PREV_MONTH_REDUCTION_APPLIED: attrs.get("prev_month_reduction_applied"),
             ATTR_CURR_MONTH_REDUCTION_APPLIED: attrs.get("curr_month_reduction_applied"),
+            ATTR_COOKING_HEATING_BOUNDARY: attrs.get("cooking_heating_boundary"),
+            ATTR_PREV_MONTH_COOKING_FEE: attrs.get("prev_month_cooking_fee"),
+            ATTR_PREV_MONTH_HEATING_FEE: attrs.get("prev_month_heating_fee"),
+            ATTR_CURR_MONTH_COOKING_FEE: attrs.get("curr_month_cooking_fee"),
+            ATTR_CURR_MONTH_HEATING_FEE: attrs.get("curr_month_heating_fee"),
         }
 
 class PreviousMonthBillSensor(SensorEntity, RestoreEntity):
