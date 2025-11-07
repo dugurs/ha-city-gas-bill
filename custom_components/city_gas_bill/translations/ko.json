@@ -43,8 +43,9 @@
   },
   "entity": {
     "button": {
-      "update_data": { "name": "데이터 갱신" },
-      "update_base_fee": { "name": "기본요금 가져오기" }
+      "update_price_data": { "name": "열량단가 갱신" },
+      "update_heat_data": { "name": "평균열량 갱신" },
+      "update_base_fee": { "name": "기본요금 갱신" }
     },
     "sensor": {
       "monthly_gas_usage": { "name": "월 가스 사용량" },

@@ -2,6 +2,7 @@
 
 """The City Gas Bill integration."""
 from __future__ import annotations
+from datetime import datetime, timedelta, time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -12,6 +13,7 @@ from .const import (
     DOMAIN, 
     PLATFORMS, 
     LOGGER,
+    CONF_READING_TIME,
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING
@@ -30,17 +32,53 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 설정이 추가된 직후, 첫 데이터 업데이트를 즉시 실행합니다.
     await coordinator.async_config_entry_first_refresh()
 
-    async def _weekly_update(now):
-        """매주 월요일에 데이터 업데이트를 트리거하기 위한 콜백 함수입니다."""
-        # now.weekday()는 월요일이 0, 일요일이 6입니다.
+    async def _weekly_price_update(now):
+        """매주 월요일에 열량단가 업데이트를 트리거하기 위한 콜백 함수입니다."""
         if now.weekday() == 0:
-            LOGGER.info("예약된 주간 업데이트: 월요일이므로 데이터 갱신을 시작합니다.")
-            await coordinator.async_request_refresh() # 코디네이터에게 데이터 업데이트를 요청
+            LOGGER.info("예약된 주간 업데이트: 월요일이므로 열량단가 갱신을 시작합니다.")
+            await coordinator.async_update_price_data() # 코디네이터의 열량단가 업데이트 메소드 호출
         else:
             LOGGER.debug("예약된 주간 업데이트: 월요일이 아니므로 건너뜁니다.")
 
-    # 매주 월요일 새벽 1시에 _weekly_update 함수를 실행하도록 스케줄을 등록합니다.
-    update_listener = async_track_time_change(hass, _weekly_update, hour=1, minute=0, second=0)
+    # 매주 월요일 새벽 1시에 _weekly_price_update 함수를 실행하도록 스케줄을 등록합니다.
+    price_update_listener = async_track_time_change(hass, _weekly_price_update, hour=1, minute=0, second=0)
+
+    # 설정에서 검침 시간을 가져와 매일 평균열량 업데이트 스케줄을 등록합니다.
+    config = entry.options or entry.data
+    # --- START: 수정된 코드 ---
+    reading_time_input = config.get(CONF_READING_TIME, "00:00")
+    update_time_obj = None
+    try:
+        reading_time_obj = None
+        
+        # 초(second)까지 포함된 "HH:MM:SS" 형식으로 파싱
+        reading_time_obj = datetime.strptime(reading_time_input, "%H:%M:%S").time()
+        
+        if reading_time_obj is None:
+            # 위에서 처리되지 않은 예외적인 타입일 경우, 에러를 발생시켜 except 구문으로 넘김
+            raise TypeError(f"지원하지 않는 시간 형식입니다: {type(reading_time_input)}")
+
+        update_time_obj = (datetime.combine(datetime.today(), reading_time_obj) - timedelta(minutes=5)).time()
+
+    except (ValueError, TypeError, KeyError):
+        # 문제가 발생했을 때 어떤 값이 들어왔는지 로그에 기록하여 디버깅을 돕습니다.
+        LOGGER.warning(
+            "검침 시간을 파싱할 수 없어 평균열량 자동 업데이트가 비활성화됩니다. (입력값: %s)",
+            reading_time_input
+        )
+    # --- END: 수정된 코드 ---
+
+    heat_update_listener = None
+    if update_time_obj:
+        async def _daily_heat_update(now):
+            """매일 검침 시간 5분 전에 평균열량 업데이트를 트리거하는 콜백 함수입니다."""
+            LOGGER.info("예약된 일일 업데이트: 평균열량 갱신을 시작합니다.")
+            await coordinator.async_update_heat_data()
+
+        heat_update_listener = async_track_time_change(
+            hass, _daily_heat_update,
+            hour=update_time_obj.hour, minute=update_time_obj.minute, second=0
+        )
 
     @callback
     def update_number_entities():
@@ -82,7 +120,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 생성된 코디네이터와 리스너들을 중앙 데이터 저장소에 보관합니다.
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
-        "update_listener": update_listener,
+        "price_update_listener": price_update_listener,
+        "heat_update_listener": heat_update_listener,
         "coordinator_listener_remover": coordinator_listener_remover,
     }
 
@@ -136,20 +175,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # 3초 후에 함수를 실행하여 엔티티가 생성될 시간을 확보합니다.
         async_call_later(hass, 3, _scrape_initial_base_fee)
 
-    async def handle_update_service(call: ServiceCall) -> None:
-        """
-        사용자가 '데이터 갱신' 버튼을 누르거나 자동화에서 서비스를 호출했을 때 실행되는 함수입니다.
-        """
-        LOGGER.info("서비스 호출로 수동 데이터 업데이트를 시작합니다.")
-        # 저장된 코디네이터를 찾아 데이터 업데이트를 요청합니다.
-        for entry_id_key, data in hass.data[DOMAIN].items():
-            if "coordinator" in data:
-                await data["coordinator"].async_request_refresh()
-                
-    # `city_gas_bill.update_data` 라는 이름의 커스텀 서비스를 Home Assistant에 등록합니다.
-    hass.services.async_register(DOMAIN, "update_data", handle_update_service)
+    async def handle_update_price_service(call: ServiceCall) -> None:
+        """사용자가 '열량단가 갱신' 서비스를 호출했을 때 실행됩니다."""
+        LOGGER.info("서비스 호출로 열량단가 업데이트를 시작합니다.")
+        # 저장된 코디네이터를 찾아 열량단가 업데이트를 요청합니다.
+        # 이 통합구성요소는 단일 인스턴스만 허용하므로 entry_id로 직접 접근합니다.
+        if coordinator:
+            await coordinator.async_update_price_data()
+
+    async def handle_update_heat_service(call: ServiceCall) -> None:
+        """사용자가 '평균열량 갱신' 서비스를 호출했을 때 실행됩니다."""
+        LOGGER.info("서비스 호출로 평균열량 업데이트를 시작합니다.")
+        if coordinator:
+            await coordinator.async_update_heat_data()
+            
+    # 새로운 서비스들을 Home Assistant에 등록합니다.
+    hass.services.async_register(DOMAIN, "update_price_data", handle_update_price_service)
+    hass.services.async_register(DOMAIN, "update_heat_data", handle_update_heat_service)
+    
     # 통합구성요소가 제거될 때 등록했던 서비스도 함께 제거되도록 합니다.
-    entry.async_on_unload(lambda: hass.services.async_remove(DOMAIN, "update_data"))
+    def remove_services():
+        hass.services.async_remove(DOMAIN, "update_price_data")
+        hass.services.async_remove(DOMAIN, "update_heat_data")
+        
+    entry.async_on_unload(remove_services)
 
     async def handle_update_base_fee_service(call: ServiceCall) -> None:
         """
@@ -196,7 +245,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # 중앙 데이터 저장소에서 이 통합구성요소의 데이터를 삭제합니다.
         data = hass.data[DOMAIN].pop(entry.entry_id)
         # 등록했던 스케줄러와 리스너를 깨끗하게 정리합니다.
-        data["update_listener"]()
+        data["price_update_listener"]()
+        if data["heat_update_listener"]:
+            data["heat_update_listener"]()
         data["coordinator_listener_remover"]()
     return unload_ok
 

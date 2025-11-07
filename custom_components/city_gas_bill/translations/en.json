@@ -43,8 +43,9 @@
   },
   "entity": {
     "button": {
-      "update_data": { "name": "Sync Data Now" },
-      "update_base_fee": { "name": "Fetch Base Fee" }
+      "update_price_data": { "name": "Update Price Data" },
+      "update_heat_data": { "name": "Update Heat Data" },
+      "update_base_fee": { "name": "Update Base Fee" }
     },
     "sensor": {
       "monthly_gas_usage": { "name": "Monthly Gas Usage" },

@@ -454,6 +454,12 @@ class EstimatedBillSensor(SensorEntity):
 
         calculator = GasBillCalculator(reading_day_config)
         
+        # 버그 수정: 계산기의 today 인자로 next_reading_day에서 하루를 뺀 날짜를 전달합니다.
+        # 이렇게 해야 계산기가 전체 청구 기간(예: 10/26 ~ 11/25)을 올바르게 인식합니다.
+        # next_reading_day를 직접 전달하면, 계산기가 시작일을 next_reading_day로 잘못 판단하여
+        # 기간이 1일로 계산되는 문제가 있었습니다.
+        calculation_end_date = next_reading_day - timedelta(days=1)
+        
         total_fee, attrs = calculator.compute_total_bill_from_usage(
             corrected_usage=corrected_estimated_usage,
             base_fee=config_inputs.base_fee,
@@ -466,13 +472,13 @@ class EstimatedBillSensor(SensorEntity):
             cooking_heating_boundary=config_inputs.cooking_heating_boundary,
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
-            today=next_reading_day,
+            today=calculation_end_date, # 수정된 종료일 사용
         )
         self._attr_native_value = total_fee
 
         self._attr_extra_state_attributes = {
             ATTR_START_DATE: start_of_period.isoformat(),
-            ATTR_END_DATE: next_reading_day.isoformat(),
+            ATTR_END_DATE: calculation_end_date.isoformat(),
             ATTR_DAYS_TOTAL: attrs.get("days_total"),
             ATTR_DAYS_PREV_MONTH: attrs.get("days_prev_month", 0),
             ATTR_DAYS_CURR_MONTH: attrs.get("days_curr_month", 0),

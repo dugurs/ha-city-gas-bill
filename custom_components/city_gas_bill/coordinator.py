@@ -105,3 +105,43 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
         # 그 외 예상치 못한 모든 종류의 오류를 처리합니다.
         except Exception as err:
             raise UpdateFailed(f"{self.provider.name}에서 예기치 않은 오류가 발생했습니다: {err}")
+
+    async def async_update_price_data(self) -> None:
+        """열량단가 데이터만 선택적으로 업데이트합니다."""
+        if self.provider.id == "manual":
+            LOGGER.debug("수동 입력 모드이므로 열량단가 업데이트를 건너뜁니다.")
+            return
+
+        LOGGER.info("%s 공급사로부터 열량단가 데이터 업데이트를 시작합니다.", self.provider.name)
+        try:
+            async with async_timeout.timeout(60):
+                price_data = await self.provider.scrape_price_data()
+                if not price_data:
+                    raise UpdateFailed(f"{self.provider.name}로부터 열량단가 데이터를 가져오지 못했습니다.")
+
+                self.last_update_success_timestamp = dt_util.utcnow()
+                # 기존 데이터에 새로운 열량단가 데이터를 덮어씁니다.
+                new_data = {**self.data, **price_data}
+                self.async_set_updated_data(new_data)
+        except Exception as err:
+            raise UpdateFailed(f"{self.provider.name}에서 열량단가 업데이트 중 오류 발생: {err}")
+
+    async def async_update_heat_data(self) -> None:
+        """평균열량 데이터만 선택적으로 업데이트합니다."""
+        if self.provider.id == "manual":
+            LOGGER.debug("수동 입력 모드이므로 평균열량 업데이트를 건너뜁니다.")
+            return
+
+        LOGGER.info("%s 공급사로부터 평균열량 데이터 업데이트를 시작합니다.", self.provider.name)
+        try:
+            async with async_timeout.timeout(60):
+                heat_data = await self.provider.scrape_heat_data()
+                if not heat_data:
+                    raise UpdateFailed(f"{self.provider.name}로부터 평균열량 데이터를 가져오지 못했습니다.")
+
+                self.last_update_success_timestamp = dt_util.utcnow()
+                # 기존 데이터에 새로운 평균열량 데이터를 덮어씁니다.
+                new_data = {**self.data, **heat_data}
+                self.async_set_updated_data(new_data)
+        except Exception as err:
+            raise UpdateFailed(f"{self.provider.name}에서 평균열량 업데이트 중 오류 발생: {err}")
