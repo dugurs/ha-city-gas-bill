@@ -196,7 +196,7 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
     """
     def __init__(self, config_entry: ConfigEntry) -> None:
         """옵션 흐름을 초기화합니다."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry # 로컬 변수로 저장
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """'init' 단계의 옵션 설정 과정을 관리합니다."""
@@ -217,7 +217,7 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
                 return self.async_create_entry(title="", data=data)
 
         # 현재 저장된 설정값(옵션 또는 최초 데이터)을 가져옵니다.
-        current_config = self.config_entry.options or self.config_entry.data
+        current_config = self._config_entry.options or self._config_entry.data
 
         # 현재 설정값을 기본값으로 채운 폼을 사용자에게 보여줍니다.
         return self.async_show_form(
