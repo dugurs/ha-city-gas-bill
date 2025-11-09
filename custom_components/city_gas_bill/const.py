@@ -34,6 +34,7 @@ PLATFORMS: Final = [SENSOR, NUMBER, BUTTON]
 CONF_PROVIDER: Final = "provider"          # 도시가스 공급사
 CONF_PROVIDER_REGION: Final = "provider_region"  # 공급사 지역 선택을 위한 키
 CONF_HEATING_TYPE: Final = "heating_type"    # 난방 타입 (주택난방, 중앙난방)
+CONF_USAGE_TYPE: Final = "usage_type"      # 사용 용도 (취사전용, 난방전용, 혼합)
 CONF_GAS_SENSOR: Final = "gas_sensor"      # 가스 계량기 센서 엔티티 ID
 CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
 CONF_READING_TIME: Final = "reading_time"  # 일일 정기 검침시간 (HH:MM)

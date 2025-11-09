@@ -26,7 +26,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 from .const import (
     DOMAIN, LOGGER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME,
-    EVENT_BILL_RESET, CONF_PROVIDER, CONF_BIMONTHLY_CYCLE,
+    EVENT_BILL_RESET, CONF_PROVIDER, CONF_BIMONTHLY_CYCLE, CONF_USAGE_TYPE,
     ATTR_START_DATE, ATTR_END_DATE, ATTR_DAYS_TOTAL, ATTR_DAYS_PREV_MONTH,
     ATTR_DAYS_CURR_MONTH, ATTR_BASE_FEE, ATTR_CORRECTION_FACTOR,
     ATTR_MONTHLY_GAS_USAGE, ATTR_CORRECTED_MONTHLY_USAGE,
@@ -218,6 +218,7 @@ class TotalBillSensor(SensorEntity):
         self._config = entry.options or entry.data
         self._gas_sensor_id = self._config[CONF_GAS_SENSOR]
         self._number_ids = number_entity_ids
+        self._usage_type = self._config.get(CONF_USAGE_TYPE, "combined")
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._last_reset_day: date | None = None
@@ -275,6 +276,7 @@ class TotalBillSensor(SensorEntity):
                     winter_reduction_fee=config_inputs.winter_reduction_fee,
                     non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
                     today=today,
+                    usage_type=self._usage_type,
                 )
                 event_state = total_fee_int
                 event_attrs = {
@@ -343,6 +345,7 @@ class TotalBillSensor(SensorEntity):
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
             today=today,
+            usage_type=self._usage_type,
         )
         self._attr_native_value = total_fee
         self._attr_extra_state_attributes = {
@@ -426,6 +429,7 @@ class EstimatedBillSensor(SensorEntity):
         self._config = entry.options or entry.data
         self._number_ids = number_entity_ids
         self._estimated_usage_unique_id = estimated_usage_unique_id
+        self._usage_type = self._config.get(CONF_USAGE_TYPE, "combined")
         self._estimated_usage_id: str | None = None
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
@@ -478,6 +482,7 @@ class EstimatedBillSensor(SensorEntity):
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
             today=calculation_end_date, # 수정된 종료일 사용
+            usage_type=self._usage_type,
         )
         self._attr_native_value = total_fee
 

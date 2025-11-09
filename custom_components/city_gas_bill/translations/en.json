@@ -7,6 +7,7 @@
         "description": "Please select your gas provider, meter sensor, reading day, and billing cycle.",
         "data": {
           "provider": "Gas Provider",
+          "usage_type": "Usage Type",
           "heating_type": "Heating Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
@@ -29,6 +30,7 @@
         "description": "Change the provider, gas sensor, or billing cycle used for calculation.",
         "data": {
           "provider": "Gas Provider",
+          "usage_type": "Usage Type",
           "heating_type": "Heating Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",

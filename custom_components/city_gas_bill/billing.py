@@ -70,10 +70,11 @@ class GasBillCalculator:
         prev_price_heating: float,
         curr_price_cooking: float,
         curr_price_heating: float,
-        cooking_heating_boundary: float, # 취사/난방 경계 (MJ)
+        cooking_heating_boundary: float,
         winter_reduction_fee: float,
         non_winter_reduction_fee: float,
         today: date,
+        usage_type: str,
     ) -> tuple[int, dict]:
         """보정된 월사용량과 요율 정보를 바탕으로 총요금과 속성을 계산합니다.
         반환: (총요금[10원단위 절사], 속성 dict)
@@ -105,34 +106,39 @@ class GasBillCalculator:
         prev_cooking_fee, prev_heating_fee = 0, 0
         curr_cooking_fee, curr_heating_fee = 0, 0
 
-        # 취사/난방 단가가 전월과 당월 모두 동일할 경우, 경계값은 의미가 없으므로 0으로 처리합니다.
-        # 이렇게 하면 불필요한 분리 계산을 건너뛰어 계산 효율성이 향상됩니다.
-        effective_boundary = cooking_heating_boundary
-        if prev_price_cooking == prev_price_heating and curr_price_cooking == curr_price_heating:
-            effective_boundary = 0.0
-
-        # 3. 요금 계산
-        if effective_boundary <= 0: # 수정된 부분: effective_boundary 사용
-            # 경계값이 없으면 모두 난방 요금으로 계산
+        # 3. 요금 계산 (사용 용도에 따라 분기)
+        if usage_type == "cooking_only":
+            # 3-1. 취사전용: 모든 사용량을 취사 단가로 계산
+            prev_cooking_fee = prev_usage_mj * prev_price_cooking
+            curr_cooking_fee = curr_usage_mj * curr_price_cooking
+        
+        elif usage_type == "heating_only":
+            # 3-2. 난방전용: 모든 사용량을 난방 단가로 계산
             prev_heating_fee = prev_usage_mj * prev_price_heating
             curr_heating_fee = curr_usage_mj * curr_price_heating
-        else:
-            # 경계값이 있으면 취사/난방 요금 분리 계산
-            # 경계(MJ)를 각 기간의 일수 비율로 분배
-            boundary_prev_mj = effective_boundary * (prev_days / total_days) # 수정된 부분: effective_boundary 사용
-            boundary_curr_mj = effective_boundary * (curr_days / total_days) # 수정된 부분: effective_boundary 사용
 
-            # 전월 요금 계산
-            prev_cooking_mj = min(prev_usage_mj, boundary_prev_mj)
-            prev_heating_mj = max(0, prev_usage_mj - prev_cooking_mj)
-            prev_cooking_fee = prev_cooking_mj * prev_price_cooking
-            prev_heating_fee = prev_heating_mj * prev_price_heating
+        else: # usage_type == "combined" (기본값)
+            # 3-3. 취사+난방: 경계값을 사용하여 분리 계산
+            effective_boundary = cooking_heating_boundary
+            if prev_price_cooking == prev_price_heating and curr_price_cooking == curr_price_heating:
+                effective_boundary = 0.0
 
-            # 당월 요금 계산
-            curr_cooking_mj = min(curr_usage_mj, boundary_curr_mj)
-            curr_heating_mj = max(0, curr_usage_mj - curr_cooking_mj)
-            curr_cooking_fee = curr_cooking_mj * curr_price_cooking
-            curr_heating_fee = curr_heating_mj * curr_price_heating
+            if effective_boundary <= 0:
+                prev_heating_fee = prev_usage_mj * prev_price_heating
+                curr_heating_fee = curr_usage_mj * curr_price_heating
+            else:
+                boundary_prev_mj = effective_boundary * (prev_days / total_days)
+                boundary_curr_mj = effective_boundary * (curr_days / total_days)
+
+                prev_cooking_mj = min(prev_usage_mj, boundary_prev_mj)
+                prev_heating_mj = max(0, prev_usage_mj - prev_cooking_mj)
+                prev_cooking_fee = prev_cooking_mj * prev_price_cooking
+                prev_heating_fee = prev_heating_mj * prev_price_heating
+
+                curr_cooking_mj = min(curr_usage_mj, boundary_curr_mj)
+                curr_heating_mj = max(0, curr_usage_mj - curr_cooking_mj)
+                curr_cooking_fee = curr_cooking_mj * curr_price_cooking
+                curr_heating_fee = curr_heating_mj * curr_price_heating
         
         prev_fee = prev_cooking_fee + prev_heating_fee
         curr_fee = curr_cooking_fee + curr_heating_fee
@@ -172,10 +178,7 @@ class GasBillCalculator:
     # -------- 격월 헬퍼 --------
     @staticmethod
     def is_billing_month(today: date, bimonthly_cycle: str | None) -> bool:
-        """해당 날짜가 격월 결제 사이클의 청구월인지 여부를 반환합니다.
-
-        bimonthly_cycle: "odd" | "even" | "disabled"
-        """
+        """해당 날짜가 격월 결제 사이클의 청구월인지 여부를 반환합니다."""
         if not bimonthly_cycle or bimonthly_cycle == "disabled":
             return False
         is_odd = today.month % 2 == 1
