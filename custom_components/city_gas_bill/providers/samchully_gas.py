@@ -124,9 +124,12 @@ class SamchullyGasProvider(GasProvider):
             
             # 2. 난방 단가 추출 (난방 타입에 따라 분기)
             heating_price_td = None
-            if self.heating_type == "central":
-                # 중앙난방 (공동주택)
+            if self.heating_type == "central_cogeneration":
+                # 중앙난방 (열전용)
                 heating_price_td = soup.select_one("table.LHOB tr:nth-of-type(3) td:nth-of-type(2)")
+            elif self.heating_type == "central_chp":
+                # 공동주택등열병합용
+                heating_price_td = soup.select_one("table.LGA1 tr:nth-of-type(1) td:nth-of-type(3)")
             else:
                 # 주택난방
                 heating_price_td = soup.select_one("table.LRH1 td:nth-of-type(2)")

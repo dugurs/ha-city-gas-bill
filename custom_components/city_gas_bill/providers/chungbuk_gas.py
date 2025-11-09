@@ -40,13 +40,13 @@ class ChungbukGasProvider(GasProvider):
         """참빛충북도시가스는 중앙난방을 지원합니다."""
         return True
 
-    async def scrape_heat_data(self) -> dict[str, float] | None:
-        """참빛충북도시가스는 자동 평균열량 조회를 지원하지 않습니다."""
+    async def scrape_heat_data(self) -> dict[str, float]:
+        """참빛충북도시가스는 자동 평균열량 조회를 지원하지 않으므로, 빈 dict를 반환하여 기존 값을 유지하도록 합니다."""
         LOGGER.warning(
             "참빛충북도시가스는 자동 평균열량 조회를 지원하지 않습니다. "
             "고지서를 참고하여 '전월/당월 평균열량' 엔티티 값을 수동으로 입력해주세요."
         )
-        return None
+        return {}
 
     async def _fetch_prices_for_month(self, target_date: date) -> dict[str, float] | None:
         """특정 월의 열량단가를 스크래핑하는 내부 헬퍼 함수입니다."""
@@ -56,7 +56,6 @@ class ChungbukGasProvider(GasProvider):
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
 
-            # 페이지 내 모든 테이블을 찾은 후, 내용("취사용")을 기반으로 정확한 요금표 테이블을 식별합니다.
             target_table = None
             for table in soup.find_all("table"):
                 if table.find("td", string=re.compile(r"\s*취사용\s*")):
@@ -69,10 +68,8 @@ class ChungbukGasProvider(GasProvider):
             
             prices = {}
 
-            # "취사용" 텍스트를 포함하는 td를 기준으로 행을 찾습니다.
             cooking_label_cell = target_table.find("td", string=re.compile(r"\s*취사용\s*"))
             if not cooking_label_cell:
-                # 위에서 테이블을 찾았으므로 이 에러는 발생하지 않아야 함
                 LOGGER.error("요금표에서 '취사용' 셀을 찾지 못했습니다.")
                 return None
 
@@ -81,7 +78,6 @@ class ChungbukGasProvider(GasProvider):
                 LOGGER.error("'취사용' 셀의 부모 행을 찾지 못했습니다.")
                 return None
 
-            # 취사용 단가: "취사용" 행의 세 번째 td
             cooking_price_cells = cooking_row.find_all("td")
             if len(cooking_price_cells) > 2:
                 prices['cooking'] = float(cooking_price_cells[2].get_text(strip=True))
@@ -89,24 +85,20 @@ class ChungbukGasProvider(GasProvider):
                 LOGGER.error("취사용 단가 셀을 찾지 못했습니다.")
                 return None
 
-            # 난방용 행: "취사용" 행의 다음 행
             heating_row = cooking_row.find_next_sibling("tr")
             if not isinstance(heating_row, Tag):
                 LOGGER.error("난방용 요금 행을 찾지 못했습니다.")
                 return None
             
-            # 중앙난방용 행: 난방용 행의 다음 행
             central_heating_row = heating_row.find_next_sibling("tr")
             if not isinstance(central_heating_row, Tag):
                 LOGGER.error("중앙난방용 요금 행을 찾지 못했습니다.")
                 return None
             
-            # 난방 타입에 따라 난방/중앙난방 단가 추출
-            if self.heating_type == 'central':
-                # 중앙난방: 중앙난방용 행의 마지막 td
+            heating_price_cell = None
+            if self.heating_type in ["central_cogeneration", "central_chp"]:
                 heating_price_cell = central_heating_row.find_all("td")[-1]
             else:
-                # 주택난방: 난방용 행의 마지막 td
                 heating_price_cell = heating_row.find_all("td")[-1]
 
             if heating_price_cell:
@@ -148,7 +140,6 @@ class ChungbukGasProvider(GasProvider):
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
             
-            # 특정 클래스에 의존하지 않고, 페이지 내 모든 li 태그를 검색하는 방식으로 복원합니다.
             li_tags = soup.find_all("li")
             for li in li_tags:
                 text = li.get_text()

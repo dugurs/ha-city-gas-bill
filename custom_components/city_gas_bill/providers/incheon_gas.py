@@ -45,7 +45,7 @@ class IncheonGasProvider(GasProvider):
 
     @property
     def SUPPORTS_CENTRAL_HEATING(self) -> bool:
-        """인천도시가스는 중앙난방(업무난방) 요금을 지원합니다."""
+        """인천도시가스는 주택용 중앙난방 요금을 지원합니다."""
         return True
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
@@ -114,12 +114,12 @@ class IncheonGasProvider(GasProvider):
                 response.raise_for_status()
                 response_text = await response.text()
 
-                # 응답 텍스트에서 'var s6="22.5084"'와 같은 단가 부분을 찾아 숫자만 추출합니다.
-                match = re.search(r'var s6="(\d+\.\d+)"', response_text)
+                # 응답 텍스트에서 'var s5="22.5084"'와 같은 단가 부분을 찾아 숫자만 추출합니다.
+                match = re.search(r'var s5="(\d+\.\d+)"', response_text)
                 if match:
                     return float(match.group(1))
                 
-                LOGGER.warning("%s 날짜의 %s 단가 데이터(s6)를 DWR 응답에서 찾지 못했습니다.", target_date, usage_type_str)
+                LOGGER.warning("%s 날짜의 %s 단가 데이터(s5)를 DWR 응답에서 찾지 못했습니다.", target_date, usage_type_str)
                 return None
         except Exception as err:
             LOGGER.error("%s 날짜의 %s 단가 조회 중 오류 발생: %s", target_date, usage_type_str, err)
@@ -151,7 +151,12 @@ class IncheonGasProvider(GasProvider):
         first_day_prev_month = first_day_curr_month - relativedelta(months=1)
 
         # 사용자가 선택한 난방 타입에 따라 API에 전달할 난방 요금제 문자열을 결정합니다.
-        heating_usage_type_str = "공동주택열전용" if self.heating_type == "central" else "주택난방"
+        if self.heating_type == "central_chp":
+            heating_usage_type_str = "공동주택등열병합용"
+        elif self.heating_type == "central_cogeneration":
+            heating_usage_type_str = "공동주택열전용"
+        else: # "residential"
+            heating_usage_type_str = "주택난방"
 
         curr_cooking = await self._fetch_price_for_date(first_day_curr_month, "주택취사")
         prev_cooking = await self._fetch_price_for_date(first_day_prev_month, "주택취사")
@@ -172,7 +177,6 @@ class IncheonGasProvider(GasProvider):
     async def scrape_base_fee(self) -> float | None:
         """
         인천도시가스 웹사이트에서 현재 지역에 맞는 기본요금을 스크래핑합니다.
-        전체 HTML 응답에서 '인천 xxx원/월' 또는 '경기 xxx원/월' 패턴을 정규식으로 찾습니다.
         """
         if not self.region:
             LOGGER.error("인천도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
@@ -183,23 +187,18 @@ class IncheonGasProvider(GasProvider):
                 response.raise_for_status()
                 html_text = await response.text()
             
-            # 설정된 지역 코드로부터 지역 이름("인천" 또는 "경기")을 가져옵니다.
             region_name = self.REGIONS.get(self.region)
             if not region_name:
                 LOGGER.warning("알 수 없는 지역 코드(%s)입니다. 기본요금을 조회할 수 없습니다.", self.region)
                 return None
             
-            # 지역 이름 뒤에 오는 숫자 요금을 찾기 위한 정규식 패턴을 생성합니다.
-            # 예: "인천\s*([\d,]+)\s*원/월"
             pattern = rf"{region_name}\s*([\d,]+)\s*원/월"
             match = re.search(pattern, html_text)
             
             if match:
-                # 찾은 숫자 문자열에서 콤마(,)를 제거하고 float으로 변환하여 반환합니다.
                 base_fee_str = match.group(1).replace(",", "")
                 return float(base_fee_str)
 
-            # 정규식에 맞는 패턴을 찾지 못한 경우
             LOGGER.error("기본요금 안내 문구에서 '%s' 지역의 요금 패턴을 찾지 못했습니다.", region_name)
             return None
             
@@ -213,6 +212,5 @@ class IncheonGasProvider(GasProvider):
     async def scrape_cooking_heating_boundary(self) -> float | None:
         """
         인천도시가스의 취사/난방 경계값을 반환합니다.
-        이 값은 고지서 기준 고정값인 516 MJ 입니다.
         """
         return 516.0

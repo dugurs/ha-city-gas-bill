@@ -96,7 +96,7 @@ class BusanGasProvider(GasProvider):
             return None
         
         # 사용자가 설정에서 선택한 난방 타입에 따라 파싱할 난방 요금의 테이블 행 이름 결정
-        heating_label = "중앙난방" if self.heating_type == "central" else "난방전용"
+        heating_label = "중앙난방" if self.heating_type in ["central_cogeneration", "central_chp"] else "난방전용"
 
         try:
             # 1. 먼저 요금 페이지에 접속하여 조회 가능한 월 목록(item-select)을 가져옵니다.
@@ -238,6 +238,5 @@ class BusanGasProvider(GasProvider):
     async def scrape_cooking_heating_boundary(self) -> float | None:
         """
         부산도시가스의 취사/난방 경계값을 반환합니다.
-        '취사전용'과 '난방전용' 요금제가 구분되어 있으므로 경계값은 0입니다.
         """
-        return 0.0
+        return 516.0

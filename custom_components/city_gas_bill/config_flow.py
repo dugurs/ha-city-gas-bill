@@ -30,13 +30,10 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         current_config = {}
 
     # providers 폴더에 있는 모든 공급사들을 가져와서 드롭다운 목록 형태로 만듭니다.
-    # 이 덕분에 새로운 공급사 파일을 추가하기만 하면 자동으로 설정 목록에 나타납니다.
-    # 'REGIONS' 속성이 있는 공급사는 지역별로 별도의 옵션을 동적으로 생성합니다.
     provider_options: list[SelectOptionDict] = []
     for provider_id, provider_class in AVAILABLE_PROVIDERS.items():
         provider_instance = provider_class(None)
         
-        # 이제 모든 provider는 REGIONS 속성을 가지고 있음
         for region_code, region_name in provider_instance.REGIONS.items():
             label = f"{region_name}, {provider_instance.name}"
             provider_options.append(
@@ -46,22 +43,19 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
                 )
             )
 
-    # 가나다 순으로 최종 목록 정렬
     provider_options = sorted(provider_options, key=lambda item: item["label"])
 
-    # '검침 주기' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
-    # label: 사용자에게 보여지는 텍스트
-    # value: 코드 내부에서 사용되는 값 ('disabled', 'odd', 'even')
     bimonthly_cycle_options = [
         SelectOptionDict(value="disabled", label="매월"),
         SelectOptionDict(value="odd", label="격월 - 홀수월"),
         SelectOptionDict(value="even", label="격월 - 짝수월"),
     ]
 
-    # '난방 타입' 드롭다운 메뉴에 표시될 옵션을 정의하고 변수명을 변경합니다.
+    # '난방 타입' 옵션을 세분화합니다.
     heating_type_options = [
         SelectOptionDict(value="residential", label="주택난방(개별)"),
-        SelectOptionDict(value="central", label="중앙난방(공동)"),
+        SelectOptionDict(value="central_cogeneration", label="중앙난방(공동열전용)"),
+        SelectOptionDict(value="central_chp", label="중앙난방(공동열병합용)"),
     ]
 
     # '사용 용도' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
@@ -70,7 +64,6 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         SelectOptionDict(value="cooking_only", label="취사전용 (취사단가만 사용)"),
         SelectOptionDict(value="heating_only", label="난방전용 (난방단가만 사용)"),
     ]
-    # --- END: 수정된 코드 ---
 
     default_provider_selection = current_config.get(CONF_PROVIDER)
     if current_config.get(CONF_PROVIDER_REGION):
@@ -86,7 +79,6 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         ),
-        # '사용 용도' 필드
         vol.Required(
             CONF_USAGE_TYPE,
             default=current_config.get(CONF_USAGE_TYPE, "combined"),
@@ -97,7 +89,6 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
                 translation_key=CONF_USAGE_TYPE
             )
         ),
-        # '난방 타입' 필드
         vol.Required(
             CONF_HEATING_TYPE,
             default=current_config.get(CONF_HEATING_TYPE, "residential"),
@@ -108,7 +99,6 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
                 translation_key=CONF_HEATING_TYPE
             )
         ),
-        # '가스 사용량 센서' 필드 (엔티티 선택 도우미)
         vol.Required(
             CONF_GAS_SENSOR,
             default=current_config.get(CONF_GAS_SENSOR),
@@ -120,17 +110,14 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
             default=current_config.get(CONF_READING_DAY, 26),
         ): vol.All(
             selector.NumberSelector(
-                # 입력값의 범위를 0(말일)부터 28일까지로 제한합니다.
                 selector.NumberSelectorConfig(min=0, max=28, mode=selector.NumberSelectorMode.BOX)
             ),
             vol.Coerce(int)
         ),
-        # '정기 검침시간' 필드 (시간 선택자)
         vol.Required(
             CONF_READING_TIME,
             default=current_config.get(CONF_READING_TIME, "00:00"),
         ): selector.TimeSelector(),
-        # '검침 주기' 필드 (드롭다운 메뉴)
         vol.Required(
             CONF_BIMONTHLY_CYCLE,
             default=current_config.get(CONF_BIMONTHLY_CYCLE, "disabled"),
@@ -177,22 +164,19 @@ class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
         
         errors = {}
         
-        # 사용자가 폼을 채우고 '제출' 버튼을 눌렀다면 user_input에 값이 들어옵니다.
         if user_input is not None:
             provider_selection = user_input[CONF_PROVIDER]
             provider_id = provider_selection.split('|')[0]
             heating_type = user_input[CONF_HEATING_TYPE]
             
             provider_class = AVAILABLE_PROVIDERS.get(provider_id)
-            # 공급사 클래스가 존재하고, 사용자가 '중앙난방'을 선택했지만 공급사가 지원하지 않는 경우 오류 처리
-            if provider_class and heating_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+            # 세분화된 중앙난방 옵션을 모두 확인합니다.
+            if provider_class and heating_type in ["central_cogeneration", "central_chp"] and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
                 errors["base"] = "central_heating_not_supported"
             else:
-                # 유효성 검사를 통과하면 새로운 설정 엔트리(ConfigEntry)를 생성하고 설정을 완료합니다.
                 data = _parse_provider_input(user_input)
                 return self.async_create_entry(title="City Gas Bill", data=data)
         
-        # user_input이 None이거나 유효성 검증에 실패한 경우, 사용자에게 설정 폼을 보여줍니다.
         return self.async_show_form(
             step_id="user",
             data_schema=_get_data_schema(),
@@ -216,7 +200,8 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
             heating_type = user_input[CONF_HEATING_TYPE]
             
             provider_class = AVAILABLE_PROVIDERS.get(provider_id)
-            if provider_class and heating_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+            # 세분화된 중앙난방 옵션을 모두 확인합니다.
+            if provider_class and heating_type in ["central_cogeneration", "central_chp"] and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
                 errors["base"] = "central_heating_not_supported"
             else:
                 data = _parse_provider_input(user_input)

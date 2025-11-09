@@ -82,12 +82,11 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
                 heat_data = await self.provider.scrape_heat_data()  # 평균열량 데이터
                 price_data = await self.provider.scrape_price_data()  # 열량단가 데이터
 
-                # 두 데이터 중 하나라도 가져오지 못했다면 실패로 처리합니다.
+                # None인 경우에만 실패로 간주하고, 빈 딕셔너리는 '업데이트할 값 없음'으로 정상 처리합니다.
                 if heat_data is None or price_data is None:
                     failed_items = []
                     if heat_data is None: failed_items.append("평균열량")
                     if price_data is None: failed_items.append("열량단가")
-                    # 업데이트 실패 예외를 발생시켜 HA에 실패했음을 알립니다.
                     raise UpdateFailed(
                         f"{self.provider.name}로부터 필수 데이터({', '.join(failed_items)})를 가져오지 못했습니다."
                     )
