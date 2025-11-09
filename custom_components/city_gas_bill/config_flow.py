@@ -16,7 +16,7 @@ from homeassistant.helpers.selector import SelectOptionDict
 
 from .const import (
     DOMAIN, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_GAS_SENSOR,
-    CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE, CONF_USAGE_TYPE
+    CONF_READING_DAY, CONF_READING_TIME, CONF_BIMONTHLY_CYCLE, CONF_HEATING_TYPE
 )
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
@@ -57,8 +57,8 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         SelectOptionDict(value="even", label="격월 - 짝수월"),
     ]
 
-    # '용도' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
-    usage_type_options = [
+    # '난방 타입' 드롭다운 메뉴에 표시될 옵션을 정의하고 변수명을 변경합니다.
+    heating_type_options = [
         SelectOptionDict(value="residential", label="주택난방(개별)"),
         SelectOptionDict(value="central", label="중앙난방(공동)"),
     ]
@@ -81,15 +81,15 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         ),
-        # '가스 용도' 필드 (드롭다운 메뉴)
+        # '난방 타입' 필드 (드롭다운 메뉴) - 변수명 및 옵션 변경
         vol.Required(
-            CONF_USAGE_TYPE,
-            default=current_config.get(CONF_USAGE_TYPE, "residential"), # 기본값은 '주택난방'
+            CONF_HEATING_TYPE,
+            default=current_config.get(CONF_HEATING_TYPE, "residential"), # 기본값은 '주택난방'
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=usage_type_options,
+                options=heating_type_options,
                 mode=selector.SelectSelectorMode.DROPDOWN,
-                translation_key=CONF_USAGE_TYPE
+                translation_key=CONF_HEATING_TYPE
             )
         ),
         # '가스 사용량 센서' 필드 (엔티티 선택 도우미)
@@ -169,14 +169,14 @@ class CityGasBillConfigFlow(ConfigFlow, domain=DOMAIN):
         
         # 사용자가 폼을 채우고 '제출' 버튼을 눌렀다면 user_input에 값이 들어옵니다.
         if user_input is not None:
-            # 사용자가 선택한 공급사와 용도를 확인하여 유효성을 검증합니다.
+            # 사용자가 선택한 공급사와 난방 타입을 확인하여 유효성을 검증합니다.
             provider_selection = user_input[CONF_PROVIDER]
             provider_id = provider_selection.split('|')[0]
-            usage_type = user_input[CONF_USAGE_TYPE]
+            heating_type = user_input[CONF_HEATING_TYPE]
             
             provider_class = AVAILABLE_PROVIDERS.get(provider_id)
             # 공급사 클래스가 존재하고, 사용자가 '중앙난방'을 선택했지만 공급사가 지원하지 않는 경우 오류 처리
-            if provider_class and usage_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+            if provider_class and heating_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
                 errors["base"] = "central_heating_not_supported"
             else:
                 # 유효성 검사를 통과하면 새로운 설정 엔트리(ConfigEntry)를 생성하고 설정을 완료합니다.
@@ -206,10 +206,10 @@ class CityGasBillOptionsFlowHandler(OptionsFlow):
             # 설정값 유효성 검증
             provider_selection = user_input[CONF_PROVIDER]
             provider_id = provider_selection.split('|')[0]
-            usage_type = user_input[CONF_USAGE_TYPE]
+            heating_type = user_input[CONF_HEATING_TYPE]
             
             provider_class = AVAILABLE_PROVIDERS.get(provider_id)
-            if provider_class and usage_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
+            if provider_class and heating_type == "central" and not provider_class(None).SUPPORTS_CENTRAL_HEATING:
                 errors["base"] = "central_heating_not_supported"
             else:
                 # 유효성 검증 통과 시, 기존 옵션을 업데이트하고 완료합니다.

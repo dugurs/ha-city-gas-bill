@@ -100,9 +100,9 @@ class ChungbukGasProvider(GasProvider):
             if not isinstance(central_heating_row, Tag):
                 LOGGER.error("중앙난방용 요금 행을 찾지 못했습니다.")
                 return None
-
-            # 사용량 타입에 따라 난방/중앙난방 단가 추출
-            if self.usage_type == 'central':
+            
+            # 난방 타입에 따라 난방/중앙난방 단가 추출
+            if self.heating_type == 'central':
                 # 중앙난방: 중앙난방용 행의 마지막 td
                 heating_price_cell = central_heating_row.find_all("td")[-1]
             else:

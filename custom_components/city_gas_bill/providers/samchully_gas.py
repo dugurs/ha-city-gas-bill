@@ -122,9 +122,9 @@ class SamchullyGasProvider(GasProvider):
                 else:
                     LOGGER.debug("%s 취사단가 '변동없음' 확인. 값을 업데이트하지 않습니다.", target_date.strftime("%Y-%m"))
             
-            # 2. 난방 단가 추출 (사용자 설정에 따라 분기)
+            # 2. 난방 단가 추출 (난방 타입에 따라 분기)
             heating_price_td = None
-            if self.usage_type == "central":
+            if self.heating_type == "central":
                 # 중앙난방 (공동주택)
                 heating_price_td = soup.select_one("table.LHOB tr:nth-of-type(3) td:nth-of-type(2)")
             else:

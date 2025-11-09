@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.helpers.aiohttp_client import async_create_clientsession  # HA에서 권장하는 aiohttp 세션 생성 헬퍼
 from homeassistant.util import dt as dt_util  # 날짜 및 시간 관련 유틸리티
 
-from .const import DOMAIN, LOGGER, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_USAGE_TYPE
+from .const import DOMAIN, LOGGER, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_HEATING_TYPE
 from .providers import AVAILABLE_PROVIDERS  # 사용 가능한 모든 공급사 목록
 from .providers.base import GasProvider  # 공급사의 기본 클래스
 
@@ -37,9 +37,9 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
         # 없으면 최초 설정 시 입력한 '데이터'를 사용합니다.
         config = self.config_entry.options or self.config_entry.data
         provider_key = config[CONF_PROVIDER]  # 예: 'seoul_gas', 'incheon_gas'
-        # 설정에서 지역 코드(region code)와 용도(usage type)를 가져옵니다.
+        # 설정에서 지역 코드(region code)와 난방 타입(heating type)을 가져옵니다.
         provider_region = config.get(CONF_PROVIDER_REGION)
-        usage_type = config.get(CONF_USAGE_TYPE)
+        heating_type = config.get(CONF_HEATING_TYPE)
 
         # 사용자가 선택한 공급사 키를 바탕으로 실제 공급사 클래스를 가져옵니다.
         provider_class = AVAILABLE_PROVIDERS.get(provider_key)
@@ -47,11 +47,11 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
             # 만약 알 수 없는 공급사가 선택되면, 설정 오류를 발생시킵니다.
             raise ConfigEntryError(f"'{provider_key}' 공급사를 찾을 수 없습니다.")
         
-        # 선택된 공급사 클래스의 인스턴스를 생성하고 웹 세션, 지역, 용도 정보를 전달합니다.
+        # 선택된 공급사 클래스의 인스턴스를 생성하고 웹 세션, 지역, 난방 타입 정보를 전달합니다.
         self.provider: GasProvider = provider_class(
             self.websession,
             region=provider_region,
-            usage_type=usage_type
+            heating_type=heating_type
         )
 
         # 마지막으로 데이터 업데이트에 성공한 시간을 기록하기 위한 변수입니다.
@@ -83,10 +83,10 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
                 price_data = await self.provider.scrape_price_data()  # 열량단가 데이터
 
                 # 두 데이터 중 하나라도 가져오지 못했다면 실패로 처리합니다.
-                if not heat_data or not price_data:
+                if heat_data is None or price_data is None:
                     failed_items = []
-                    if not heat_data: failed_items.append("평균열량")
-                    if not price_data: failed_items.append("열량단가")
+                    if heat_data is None: failed_items.append("평균열량")
+                    if price_data is None: failed_items.append("열량단가")
                     # 업데이트 실패 예외를 발생시켜 HA에 실패했음을 알립니다.
                     raise UpdateFailed(
                         f"{self.provider.name}로부터 필수 데이터({', '.join(failed_items)})를 가져오지 못했습니다."
@@ -116,7 +116,7 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             async with async_timeout.timeout(60):
                 price_data = await self.provider.scrape_price_data()
-                if not price_data:
+                if price_data is None:
                     raise UpdateFailed(f"{self.provider.name}로부터 열량단가 데이터를 가져오지 못했습니다.")
 
                 self.last_update_success_timestamp = dt_util.utcnow()
@@ -136,7 +136,7 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             async with async_timeout.timeout(60):
                 heat_data = await self.provider.scrape_heat_data()
-                if not heat_data:
+                if heat_data is None:
                     raise UpdateFailed(f"{self.provider.name}로부터 평균열량 데이터를 가져오지 못했습니다.")
 
                 self.last_update_success_timestamp = dt_util.utcnow()

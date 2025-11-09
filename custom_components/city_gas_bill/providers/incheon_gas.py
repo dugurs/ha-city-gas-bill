@@ -150,9 +150,8 @@ class IncheonGasProvider(GasProvider):
         first_day_curr_month = today.replace(day=1)
         first_day_prev_month = first_day_curr_month - relativedelta(months=1)
 
-        # 사용자가 선택한 용도에 따라 API에 전달할 난방 요금제 문자열을 결정합니다.
-        # 인천도시가스는 '업무난방'을 중앙난방으로 취급하는 경우가 많습니다.
-        heating_usage_type_str = "업무난방" if self.usage_type == "central" else "주택난방"
+        # 사용자가 선택한 난방 타입에 따라 API에 전달할 난방 요금제 문자열을 결정합니다.
+        heating_usage_type_str = "공동주택열전용" if self.heating_type == "central" else "주택난방"
 
         curr_cooking = await self._fetch_price_for_date(first_day_curr_month, "주택취사")
         prev_cooking = await self._fetch_price_for_date(first_day_prev_month, "주택취사")

@@ -12,8 +12,7 @@ class GasProvider(ABC):
     모든 지역별 도시가스 공급사를 위한 추상 기본 클래스입니다.
     새로운 공급사를 추가하려면 반드시 이 클래스를 상속받아야 합니다.
     """
-
-    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None, usage_type: str | None = None):
+    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None, heating_type: str | None = None):
         """
         공급사를 초기화합니다.
         
@@ -21,11 +20,11 @@ class GasProvider(ABC):
             websession: 웹사이트에 HTTP 요청을 보낼 때 사용할 aiohttp 클라이언트 세션입니다.
                         코디네이터로부터 전달받습니다.
             region: 공급사가 지역별로 다른 로직을 가져야 할 때 사용되는 지역 코드입니다.
-            usage_type: 사용자가 설정에서 선택한 가스 용도 (예: "residential", "central").
+            heating_type: 사용자가 설정에서 선택한 난방 타입 (예: "residential", "central").
         """
         self.websession = websession
         self.region = region
-        self.usage_type = usage_type
+        self.heating_type = heating_type
 
     # --- 아래의 4개 속성/메소드는 @abstractmethod로 선언되어 ---
     # --- 이 클래스를 상속받는 모든 자식 클래스에서 반드시 구현해야 합니다. ---

@@ -43,105 +43,103 @@ from city_gas_bill.providers.busan_gas import BusanGasProvider
 from city_gas_bill.providers.kiturami_gas import KituramiGasProvider
 from city_gas_bill.providers.samchully_gas import SamchullyGasProvider
 from city_gas_bill.providers.daeryun_ens import DaeryunENSProvider
-from city_gas_bill.providers.chungbuk_gas import ChungbukGasProvider # --- START: 수정된 코드 ---
+from city_gas_bill.providers.chungbuk_gas import ChungbukGasProvider
 
 # --- 설정 끝 ---
 
 
 # --- 여기에 테스트할 공급사와 설정을 추가하거나 주석 처리하여 관리합니다. ---
 PROVIDERS_TO_TEST = [
-    # {
-    #     "name": "서울도시가스",
-    #     "class": SeoulGasProvider,
-    #     "region": "01",  # "01": 서울, "02": 경기
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "인천도시가스 (인천)",
-    #     "class": IncheonGasProvider,
-    #     "region": "1",   # "1": 인천, "2": 경기
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "인천도시가스 (경기, 중앙난방)",
-    #     "class": IncheonGasProvider,
-    #     "region": "2",
-    #     "usage_type": "central", # 중앙난방 테스트
-    # },
-    # {
-    #     "name": "예스코",
-    #     "class": YescoGasProvider,
-    #     "region": "1",   # "1": 서울, "8": 경기
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "코원에너지서비스 (서울)",
-    #     "class": KooneGasProvider,
-    #     "region": "274", # "274": 서울, "275": 경기
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "코원에너지서비스 (경기)",
-    #     "class": KooneGasProvider,
-    #     "region": "275", 
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "부산도시가스 (주택난방)",
-    #     "class": BusanGasProvider,
-    #     "region": "276", # "276": 부산
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "부산도시가스 (중앙난방)",
-    #     "class": BusanGasProvider,
-    #     "region": "276",
-    #     "usage_type": "central", # 중앙난방 테스트
-    # },
-    # {
-    #     "name": "귀뚜라미에너지",
-    #     "class": KituramiGasProvider,
-    #     "region": "seoul", # "seoul": 서울
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (경기, 주택난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0001",  # "0001": 경기, "0002": 인천
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (인천, 주택난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0002",
-    #     "usage_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (경기, 중앙난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0001",
-    #     "usage_type": "central", # 중앙난방 테스트
-    # },
-    # {
-    #     "name": "대륜이엔에스",
-    #     "class": DaeryunENSProvider,
-    #     "region": "seoul", # "seoul": 서울, "gyeonggi": 경기
-    #     "usage_type": "residential",
-    # },
-    # --- START: 수정된 코드 ---
+    {
+        "name": "서울도시가스",
+        "class": SeoulGasProvider,
+        "region": "01",
+        "heating_type": "residential",
+    },
+    {
+        "name": "인천도시가스 (인천)",
+        "class": IncheonGasProvider,
+        "region": "1",
+        "heating_type": "residential",
+    },
+    {
+        "name": "인천도시가스 (경기, 중앙난방)",
+        "class": IncheonGasProvider,
+        "region": "2",
+        "heating_type": "central",
+    },
+    {
+        "name": "예스코",
+        "class": YescoGasProvider,
+        "region": "1",
+        "heating_type": "residential",
+    },
+    {
+        "name": "코원에너지서비스 (서울)",
+        "class": KooneGasProvider,
+        "region": "274",
+        "heating_type": "residential",
+    },
+    {
+        "name": "코원에너지서비스 (경기)",
+        "class": KooneGasProvider,
+        "region": "275", 
+        "heating_type": "residential",
+    },
+    {
+        "name": "부산도시가스 (주택난방)",
+        "class": BusanGasProvider,
+        "region": "276",
+        "heating_type": "residential",
+    },
+    {
+        "name": "부산도시가스 (중앙난방)",
+        "class": BusanGasProvider,
+        "region": "276",
+        "heating_type": "central",
+    },
+    {
+        "name": "귀뚜라미에너지",
+        "class": KituramiGasProvider,
+        "region": "seoul",
+        "heating_type": "residential",
+    },
+    {
+        "name": "삼천리 도시가스 (경기, 주택난방)",
+        "class": SamchullyGasProvider,
+        "region": "0001",
+        "heating_type": "residential",
+    },
+    {
+        "name": "삼천리 도시가스 (인천, 주택난방)",
+        "class": SamchullyGasProvider,
+        "region": "0002",
+        "heating_type": "residential",
+    },
+    {
+        "name": "삼천리 도시가스 (경기, 중앙난방)",
+        "class": SamchullyGasProvider,
+        "region": "0001",
+        "heating_type": "central",
+    },
+    {
+        "name": "대륜이엔에스",
+        "class": DaeryunENSProvider,
+        "region": "seoul",
+        "heating_type": "residential",
+    },
     {
         "name": "참빛충북도시가스 (주택난방)",
         "class": ChungbukGasProvider,
         "region": "chungbuk",
-        "usage_type": "residential",
+        "heating_type": "residential",
     },
     {
         "name": "참빛충북도시가스 (중앙난방)",
         "class": ChungbukGasProvider,
         "region": "chungbuk",
-        "usage_type": "central",
+        "heating_type": "central",
     },
-    # --- END: 수정된 코드 ---
 ]
 # ---
 
@@ -150,14 +148,14 @@ async def run_provider_test(session, config):
     """단일 공급사에 대한 테스트를 실행하는 함수"""
     provider_name = config["name"]
     logging.info(f"===== {provider_name} 테스트 시작 =====")
-    logging.info(f"(지역: {config['region']}, 용도: {config['usage_type']})")
+    logging.info(f"(지역: {config['region']}, 난방타입: {config['heating_type']})")
 
     try:
         # 설정에 따라 동적으로 공급사 인스턴스 생성
         provider = config["class"](
             websession=session,
             region=config["region"],
-            usage_type=config["usage_type"]
+            heating_type=config["heating_type"]
         )
 
         # 1. 평균열량 테스트

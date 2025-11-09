@@ -7,7 +7,7 @@
         "description": "요금 계산을 위한 도시가스 공급사, 가스 계량기 센서, 월 정기 검침일 등을 선택해주세요.",
         "data": {
           "provider": "도시가스 공급사",
-          "usage_type": "가스 용도",
+          "heating_type": "난방 타입",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "일일 정기 검침시간 (HH:MM)",
@@ -29,7 +29,7 @@
         "description": "요금 계산에 사용될 공급사, 가스 센서 또는 검침 주기 등을 변경합니다.",
         "data": {
           "provider": "도시가스 공급사",
-          "usage_type": "가스 용도",
+          "heating_type": "난방 타입",
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "월 정기 검침시간 (HH:MM)",

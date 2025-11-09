@@ -95,8 +95,8 @@ class BusanGasProvider(GasProvider):
             LOGGER.error("부산도시가스 공급사에 지역 코드가 설정되지 않아 열량단가를 조회할 수 없습니다.")
             return None
         
-        # 사용자가 설정에서 선택한 용도에 따라 파싱할 난방 요금의 테이블 행 이름 결정
-        heating_label = "중앙난방" if self.usage_type == "central" else "난방전용"
+        # 사용자가 설정에서 선택한 난방 타입에 따라 파싱할 난방 요금의 테이블 행 이름 결정
+        heating_label = "중앙난방" if self.heating_type == "central" else "난방전용"
 
         try:
             # 1. 먼저 요금 페이지에 접속하여 조회 가능한 월 목록(item-select)을 가져옵니다.

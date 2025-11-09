@@ -30,11 +30,11 @@ class YescoGasProvider(GasProvider):
         "8": "경기",
     }
     
-    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None, usage_type: str | None = None):
+    def __init__(self, websession: aiohttp.ClientSession | None, region: str | None = None, heating_type: str | None = None):
         """
-        공급사를 초기화하고, 선택된 지역 코드와 용도를 저장합니다.
+        공급사를 초기화하고, 선택된 지역 코드와 난방 타입을 저장합니다.
         """
-        super().__init__(websession, region=region, usage_type=usage_type)
+        super().__init__(websession, region=region, heating_type=heating_type)
 
     @property
     def id(self) -> str:
