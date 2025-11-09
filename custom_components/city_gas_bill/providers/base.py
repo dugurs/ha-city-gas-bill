@@ -98,3 +98,11 @@ class GasProvider(ABC):
         실패 시에는 None을 반환해야 합니다.
         지원하지 않는 경우에도 None을 반환합니다.
         """
+
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        (선택적) 웹사이트에서 '취사/난방 경계값(MJ)'을 스크래핑하는 비동기 메소드입니다.
+        이 기능을 지원하는 공급사는 이 메소드를 재정의(override)해야 합니다.
+        성공 시 숫자(float)를, 실패 또는 미지원 시 None을 반환합니다.
+        """
+        return None

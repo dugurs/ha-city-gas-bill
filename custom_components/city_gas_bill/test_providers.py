@@ -2,7 +2,7 @@
 
 """
 City Gas Bill 통합구성요소의 모든 공급사(Provider)를 한 번에 테스트하기 위한
-통합 테스트 스크립트입니다.
+통합 테스트 스CRIPT입니다.
 """
 
 import asyncio
@@ -41,6 +41,9 @@ from city_gas_bill.providers.yesco_gas import YescoGasProvider
 from city_gas_bill.providers.koone_gas import KooneGasProvider
 from city_gas_bill.providers.busan_gas import BusanGasProvider
 from city_gas_bill.providers.kiturami_gas import KituramiGasProvider
+from city_gas_bill.providers.samchully_gas import SamchullyGasProvider
+from city_gas_bill.providers.daeryun_ens import DaeryunENSProvider
+from city_gas_bill.providers.chungbuk_gas import ChungbukGasProvider # --- START: 수정된 코드 ---
 
 # --- 설정 끝 ---
 
@@ -78,6 +81,12 @@ PROVIDERS_TO_TEST = [
     #     "usage_type": "residential",
     # },
     # {
+    #     "name": "코원에너지서비스 (경기)",
+    #     "class": KooneGasProvider,
+    #     "region": "275", 
+    #     "usage_type": "residential",
+    # },
+    # {
     #     "name": "부산도시가스 (주택난방)",
     #     "class": BusanGasProvider,
     #     "region": "276", # "276": 부산
@@ -89,12 +98,50 @@ PROVIDERS_TO_TEST = [
     #     "region": "276",
     #     "usage_type": "central", # 중앙난방 테스트
     # },
+    # {
+    #     "name": "귀뚜라미에너지",
+    #     "class": KituramiGasProvider,
+    #     "region": "seoul", # "seoul": 서울
+    #     "usage_type": "residential",
+    # },
+    # {
+    #     "name": "삼천리 도시가스 (경기, 주택난방)",
+    #     "class": SamchullyGasProvider,
+    #     "region": "0001",  # "0001": 경기, "0002": 인천
+    #     "usage_type": "residential",
+    # },
+    # {
+    #     "name": "삼천리 도시가스 (인천, 주택난방)",
+    #     "class": SamchullyGasProvider,
+    #     "region": "0002",
+    #     "usage_type": "residential",
+    # },
+    # {
+    #     "name": "삼천리 도시가스 (경기, 중앙난방)",
+    #     "class": SamchullyGasProvider,
+    #     "region": "0001",
+    #     "usage_type": "central", # 중앙난방 테스트
+    # },
+    # {
+    #     "name": "대륜이엔에스",
+    #     "class": DaeryunENSProvider,
+    #     "region": "seoul", # "seoul": 서울, "gyeonggi": 경기
+    #     "usage_type": "residential",
+    # },
+    # --- START: 수정된 코드 ---
     {
-        "name": "귀뚜라미에너지",
-        "class": KituramiGasProvider,
-        "region": "seoul", # "seoul": 서울
+        "name": "참빛충북도시가스 (주택난방)",
+        "class": ChungbukGasProvider,
+        "region": "chungbuk",
         "usage_type": "residential",
     },
+    {
+        "name": "참빛충북도시가스 (중앙난방)",
+        "class": ChungbukGasProvider,
+        "region": "chungbuk",
+        "usage_type": "central",
+    },
+    # --- END: 수정된 코드 ---
 ]
 # ---
 
@@ -119,15 +166,18 @@ async def run_provider_test(session, config):
         if heat_data:
             logging.info(f"✅ [성공] 평균열량: {heat_data}")
         else:
-            logging.error("❌ [실패] 평균열량 데이터가 None을 반환했습니다.")
+            # 의도적으로 None을 반환하는 경우 경고로 처리합니다.
+            logging.warning("⚠️ [알림] 평균열량 자동 조회를 지원하지 않거나 실패했습니다 (결과: None).")
 
         # 2. 열량단가 테스트
         logging.info("--- 2. 열량단가 데이터 테스트 ---")
         price_data = await provider.scrape_price_data()
-        if price_data:
-            logging.info(f"✅ [성공] 열량단가: {price_data}")
+        # None일 경우만 실패로 처리하고, 빈 딕셔너리({})는 성공(변동 없음)으로 간주합니다.
+        if price_data is not None:
+            logging.info(f"✅ [성공] 열량단가: {price_data if price_data else '변동 없음'}")
         else:
-            logging.error("❌ [실패] 열량단가 데이터가 None을 반환했습니다.")
+            # 의도적으로 None을 반환하는 경우 경고로 처리합니다.
+            logging.warning("⚠️ [알림] 열량단가 자동 조회를 지원하지 않거나 실패했습니다 (결과: None).")
 
         # 3. 기본요금 테스트
         logging.info("--- 3. 기본요금 데이터 테스트 ---")
@@ -136,6 +186,17 @@ async def run_provider_test(session, config):
             logging.info(f"✅ [성공] 기본요금: {base_fee}")
         else:
             logging.error("❌ [실패] 기본요금 데이터가 None을 반환했습니다.")
+
+        # 4. 취사난방경계 테스트
+        logging.info("--- 4. 취사난방경계 데이터 테스트 ---")
+        if hasattr(provider, "scrape_cooking_heating_boundary"):
+            boundary_data = await provider.scrape_cooking_heating_boundary()
+            if boundary_data is not None:
+                logging.info(f"✅ [성공] 취사난방경계: {boundary_data} MJ")
+            else:
+                logging.warning("⚠️ [알림] 취사난방경계 데이터를 가져오지 못했거나 지원하지 않습니다.")
+        else:
+            logging.info("ℹ️ [정보] 이 공급사는 취사난방경계 스크래핑을 지원하지 않습니다.")
 
     except Exception as e:
         logging.error(f"💥 [{provider_name}] 테스트 중 심각한 예외 발생: {e}", exc_info=True)

@@ -302,12 +302,17 @@ class TotalBillSensor(SensorEntity):
 
             self.hass.bus.async_fire(f"{EVENT_BILL_RESET}_{self._entry.entry_id}", {"state": event_state, "attributes": event_attrs,})
             
-            if current_reading is not None:
-                integer_part = int(current_reading)
-                new_start_value = current_reading - float(integer_part)
+            if current_reading is not None and start_reading is not None:
+                # 월검침시작값을 (기존 시작값 + 청구된 정수 사용량)으로 갱신합니다.
+                # 이렇게 해야 청구되지 않은 소수점 이하 사용량이 다음 달로 정확히 이월됩니다.
+                monthly_usage_raw = current_reading - start_reading
+                if monthly_usage_raw < 0: monthly_usage_raw = 0
+                monthly_usage_int = int(monthly_usage_raw)
+
+                new_start_value = start_reading + monthly_usage_int
                 await self.hass.services.async_call("number", "set_value", {"entity_id": start_reading_id, "value": float(new_start_value)}, blocking=True)
                 self._last_reset_day = today
-                LOGGER.info("새로운 월 검침 시작값(소수부)을 %s로 설정했습니다.", new_start_value)
+                LOGGER.info("새로운 월 검침 시작값을 %s로 설정했습니다.", new_start_value)
 
     async def _calculate_bill(self) -> None:
         await self._check_and_reset_on_reading_day()

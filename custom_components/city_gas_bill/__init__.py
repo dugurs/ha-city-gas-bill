@@ -45,28 +45,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # 설정에서 검침 시간을 가져와 매일 평균열량 업데이트 스케줄을 등록합니다.
     config = entry.options or entry.data
-    # --- START: 수정된 코드 ---
     reading_time_input = config.get(CONF_READING_TIME, "00:00")
     update_time_obj = None
     try:
         reading_time_obj = None
         
-        # 초(second)까지 포함된 "HH:MM:SS" 형식으로 파싱
-        reading_time_obj = datetime.strptime(reading_time_input, "%H:%M:%S").time()
-        
-        if reading_time_obj is None:
-            # 위에서 처리되지 않은 예외적인 타입일 경우, 에러를 발생시켜 except 구문으로 넘김
-            raise TypeError(f"지원하지 않는 시간 형식입니다: {type(reading_time_input)}")
+        # "HH:MM" 형식을 먼저 시도 (가장 일반적인 UI 입력 형식)
+        try:
+            reading_time_obj = datetime.strptime(reading_time_input, "%H:%M").time()
+        except ValueError:
+            # 실패 시 "HH:MM:SS" 형식으로 다시 시도
+            reading_time_obj = datetime.strptime(reading_time_input, "%H:%M:%S").time()
 
         update_time_obj = (datetime.combine(datetime.today(), reading_time_obj) - timedelta(minutes=5)).time()
 
-    except (ValueError, TypeError, KeyError):
+    except (ValueError, TypeError):
         # 문제가 발생했을 때 어떤 값이 들어왔는지 로그에 기록하여 디버깅을 돕습니다.
         LOGGER.warning(
-            "검침 시간을 파싱할 수 없어 평균열량 자동 업데이트가 비활성화됩니다. (입력값: %s)",
+            "검침 시간 형식을 파싱할 수 없어 평균열량 자동 업데이트가 비활성화됩니다. (입력값: %s, 지원 형식: HH:MM 또는 HH:MM:SS)",
             reading_time_input
         )
-    # --- END: 수정된 코드 ---
 
     heat_update_listener = None
     if update_time_obj:
@@ -105,6 +103,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             new_value = coordinator.data.get(data_key)
 
             if entity_id and new_value is not None:
+                # '변동없음' 예외처리를 위해 기존 값과 비교하는 로직 추가
+                try:
+                    current_state = hass.states.get(entity_id)
+                    # 새 값이 0보다 크고, 기존 값이 '변동없음' 처리 등으로 인해 0일 경우에만 업데이트
+                    if new_value > 0 and (current_state is None or float(current_state.state) == 0):
+                        LOGGER.warning("'%s'의 단가 값이 0이므로 새 값(%s)으로 강제 업데이트합니다.", entity_id, new_value)
+                    # '변동없음'일 경우 new_value가 없을 것이므로, 기존 로직은 대부분의 경우에 유효
+                    elif current_state is not None and float(current_state.state) == new_value:
+                        continue # 값이 같으면 업데이트 건너뛰기
+                except (ValueError, TypeError):
+                    pass # 상태값을 float으로 변환할 수 없으면 그냥 진행
+                
                 LOGGER.debug("%s 엔티티를 새 값(%s)으로 업데이트합니다.", entity_id, new_value)
                 hass.async_create_task(
                     hass.services.async_call(
@@ -144,42 +154,59 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_data = {**entry.data, "_initial_reload_done": True}
         hass.config_entries.async_update_entry(entry, data=new_data)
         
-    # 최초 설정 시 기본요금을 자동으로 한 번 스크랩하는 로직
+    # 최초 설정 시 기본요금 및 취사난방경계값을 자동으로 한 번 스크랩하는 로직
     if not entry.data.get("_initial_base_fee_scraped"):
-        LOGGER.info("최초 설정 확인: 기본요금 자동 조회를 3초 후에 시도합니다.")
+        LOGGER.info("최초 설정 확인: 기본요금 및 기타 설정값 자동 조회를 3초 후에 시도합니다.")
 
-        async def _scrape_initial_base_fee(_=None):
-            """엔티티가 준비될 시간을 기다린 후, 기본요금을 스크랩하고 값을 설정합니다."""
+        async def _scrape_initial_values(_=None):
+            """엔티티가 준비될 시간을 기다린 후, 필요한 값들을 스크랩하고 설정합니다."""
+            ent_reg = er.async_get(hass)
+
+            # 1. 기본요금 조회 및 설정
             LOGGER.debug("초기 기본요금 조회를 시작합니다.")
             base_fee = await coordinator.provider.scrape_base_fee()
 
             if base_fee is not None:
-                ent_reg = er.async_get(hass)
                 entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_base_fee")
                 if entity_id:
                     LOGGER.info("조회된 초기 기본요금 %s원을 '%s' 엔티티에 설정합니다.", base_fee, entity_id)
                     await hass.services.async_call(
                         "number", "set_value",
-                        {"entity_id": entity_id, "value": base_fee},
-                        blocking=False
+                        {"entity_id": entity_id, "value": base_fee}, blocking=False
                     )
                 else:
                     LOGGER.warning("초기 기본요금을 설정할 '기본 요금' Number 엔티티를 아직 찾을 수 없습니다.")
             else:
                 LOGGER.warning("초기 기본요금을 가져오는 데 실패했습니다. 수동으로 설정해주세요.")
 
+            # 2. 취사/난방 경계값 조회 및 설정 (선택적 기능)
+            if hasattr(coordinator.provider, "scrape_cooking_heating_boundary"):
+                LOGGER.debug("초기 취사/난방 경계값 조회를 시작합니다.")
+                boundary = await coordinator.provider.scrape_cooking_heating_boundary()
+
+                if boundary is not None:
+                    entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cooking_heating_boundary")
+                    if entity_id:
+                        LOGGER.info("조회된 초기 취사/난방 경계값 %s MJ를 '%s' 엔티티에 설정합니다.", boundary, entity_id)
+                        await hass.services.async_call(
+                            "number", "set_value",
+                            {"entity_id": entity_id, "value": boundary}, blocking=False
+                        )
+                    else:
+                        LOGGER.warning("초기 경계값을 설정할 '취사난방경계' Number 엔티티를 아직 찾을 수 없습니다.")
+                else:
+                    LOGGER.info("선택한 공급사에서 취사/난방 경계값을 가져올 수 없습니다. 필요시 수동으로 설정해주세요.")
+
             # 성공 여부와 관계없이 다시 실행되지 않도록 플래그를 업데이트합니다.
             new_data = {**entry.data, "_initial_base_fee_scraped": True}
             hass.config_entries.async_update_entry(entry, data=new_data)
 
         # 3초 후에 함수를 실행하여 엔티티가 생성될 시간을 확보합니다.
-        async_call_later(hass, 3, _scrape_initial_base_fee)
+        async_call_later(hass, 3, _scrape_initial_values)
 
     async def handle_update_price_service(call: ServiceCall) -> None:
         """사용자가 '열량단가 갱신' 서비스를 호출했을 때 실행됩니다."""
         LOGGER.info("서비스 호출로 열량단가 업데이트를 시작합니다.")
-        # 저장된 코디네이터를 찾아 열량단가 업데이트를 요청합니다.
-        # 이 통합구성요소는 단일 인스턴스만 허용하므로 entry_id로 직접 접근합니다.
         if coordinator:
             await coordinator.async_update_price_data()
 
@@ -202,32 +229,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def handle_update_base_fee_service(call: ServiceCall) -> None:
         """
-        공급사 웹사이트에서 최신 기본요금을 가져와 Number 엔티티를 업데이트하는 서비스 핸들러입니다.
+        공급사 웹사이트에서 최신 기본요금과 기타 설정값을 가져와 Number 엔티티를 업데이트하는 서비스 핸들러입니다.
         """
-        LOGGER.info("서비스 호출로 기본요금 업데이트를 시작합니다.")
+        LOGGER.info("서비스 호출로 기본요금 및 기타 설정값 업데이트를 시작합니다.")
         coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
         if not coordinator:
-            LOGGER.error("코디네이터를 찾을 수 없어 기본요금을 업데이트할 수 없습니다.")
+            LOGGER.error("코디네이터를 찾을 수 없어 업데이트할 수 없습니다.")
             return
 
-        # 공급사의 기본요금 스크래핑 메소드 호출
+        ent_reg = er.async_get(hass)
+        
+        # 1. 기본요금 스크래핑 및 업데이트
         base_fee = await coordinator.provider.scrape_base_fee()
-
         if base_fee is not None:
-            ent_reg = er.async_get(hass)
             entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_base_fee")
-            
             if entity_id:
                 LOGGER.info("새로운 기본요금 %s원을 '%s' 엔티티에 설정합니다.", base_fee, entity_id)
                 await hass.services.async_call(
                     "number", "set_value",
-                    {"entity_id": entity_id, "value": base_fee},
-                    blocking=False
+                    {"entity_id": entity_id, "value": base_fee}, blocking=False
                 )
             else:
                 LOGGER.warning("'기본 요금' Number 엔티티를 찾을 수 없어 값을 업데이트하지 못했습니다.")
         else:
             LOGGER.warning("%s 공급사에서 기본요금을 가져오는 데 실패했습니다.", coordinator.provider.name)
+
+        # 2. 취사/난방 경계값 스크래핑 및 업데이트 (선택적 기능)
+        if hasattr(coordinator.provider, "scrape_cooking_heating_boundary"):
+            boundary = await coordinator.provider.scrape_cooking_heating_boundary()
+            if boundary is not None:
+                entity_id = ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cooking_heating_boundary")
+                if entity_id:
+                    LOGGER.info("새로운 취사/난방 경계값 %s MJ를 '%s' 엔티티에 설정합니다.", boundary, entity_id)
+                    await hass.services.async_call(
+                        "number", "set_value",
+                        {"entity_id": entity_id, "value": boundary}, blocking=False
+                    )
+                else:
+                    LOGGER.warning("'취사난방경계' Number 엔티티를 찾을 수 없어 값을 업데이트하지 못했습니다.")
+            else:
+                LOGGER.warning("%s 공급사에서 취사/난방 경계값을 가져오는 데 실패했습니다.", coordinator.provider.name)
 
     # 'city_gas_bill.update_base_fee' 서비스를 등록합니다.
     hass.services.async_register(DOMAIN, "update_base_fee", handle_update_base_fee_service)

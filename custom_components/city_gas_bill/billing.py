@@ -105,16 +105,22 @@ class GasBillCalculator:
         prev_cooking_fee, prev_heating_fee = 0, 0
         curr_cooking_fee, curr_heating_fee = 0, 0
 
+        # 취사/난방 단가가 전월과 당월 모두 동일할 경우, 경계값은 의미가 없으므로 0으로 처리합니다.
+        # 이렇게 하면 불필요한 분리 계산을 건너뛰어 계산 효율성이 향상됩니다.
+        effective_boundary = cooking_heating_boundary
+        if prev_price_cooking == prev_price_heating and curr_price_cooking == curr_price_heating:
+            effective_boundary = 0.0
+
         # 3. 요금 계산
-        if cooking_heating_boundary <= 0:
+        if effective_boundary <= 0: # 수정된 부분: effective_boundary 사용
             # 경계값이 없으면 모두 난방 요금으로 계산
             prev_heating_fee = prev_usage_mj * prev_price_heating
             curr_heating_fee = curr_usage_mj * curr_price_heating
         else:
             # 경계값이 있으면 취사/난방 요금 분리 계산
             # 경계(MJ)를 각 기간의 일수 비율로 분배
-            boundary_prev_mj = cooking_heating_boundary * (prev_days / total_days)
-            boundary_curr_mj = cooking_heating_boundary * (curr_days / total_days)
+            boundary_prev_mj = effective_boundary * (prev_days / total_days) # 수정된 부분: effective_boundary 사용
+            boundary_curr_mj = effective_boundary * (curr_days / total_days) # 수정된 부분: effective_boundary 사용
 
             # 전월 요금 계산
             prev_cooking_mj = min(prev_usage_mj, boundary_prev_mj)

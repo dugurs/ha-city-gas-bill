@@ -59,8 +59,8 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
 
     # '용도' 드롭다운 메뉴에 표시될 옵션을 정의합니다.
     usage_type_options = [
-        SelectOptionDict(value="residential", label="주택난방"),
-        SelectOptionDict(value="central", label="중앙난방"),
+        SelectOptionDict(value="residential", label="주택난방(개별)"),
+        SelectOptionDict(value="central", label="중앙난방(공동)"),
     ]
 
     # 공급사 선택기의 default 값 설정 방식 변경

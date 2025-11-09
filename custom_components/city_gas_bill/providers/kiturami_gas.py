@@ -17,9 +17,8 @@ from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class KituramiGasProvider(GasProvider):
     """
@@ -84,13 +83,13 @@ class KituramiGasProvider(GasProvider):
             # 당월 요금표 테이블을 찾습니다.
             curr_table = soup.select_one(f"#part{curr_part_no} table")
             if not curr_table:
-                _LOGGER.error("당월(part%s) 요금표 테이블을 찾지 못했습니다.", curr_part_no)
+                LOGGER.error("당월(part%s) 요금표 테이블을 찾지 못했습니다.", curr_part_no)
                 return None
             
             # 전월 요금표 테이블을 찾습니다.
             prev_table = soup.select_one(f"#part{prev_part_no} table")
             if not prev_table:
-                _LOGGER.error("전월(part%s) 요금표 테이블을 찾지 못했습니다.", prev_part_no)
+                LOGGER.error("전월(part%s) 요금표 테이블을 찾지 못했습니다.", prev_part_no)
                 return None
 
             # 각 테이블에서 단가 값을 추출합니다.
@@ -106,10 +105,10 @@ class KituramiGasProvider(GasProvider):
                 DATA_PREV_MONTH_PRICE_HEATING: prev_price,
             }
         except (ValueError, TypeError, AttributeError) as e:
-            _LOGGER.error("귀뚜라미에너지 열량단가 파싱 중 오류 발생: %s", e)
+            LOGGER.error("귀뚜라미에너지 열량단가 파싱 중 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("귀뚜라미에너지 열량단가 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("귀뚜라미에너지 열량단가 스크래핑 중 오류 발생: %s", err)
             return None
 
     async def scrape_base_fee(self) -> float | None:
@@ -122,7 +121,7 @@ class KituramiGasProvider(GasProvider):
             # 기본요금 안내 문구가 있는 p 태그를 찾습니다.
             p_tag = soup.select_one("div.contents_area > p.p_style")
             if not p_tag:
-                _LOGGER.error("기본요금 안내 문구가 포함된 p 태그를 찾지 못했습니다.")
+                LOGGER.error("기본요금 안내 문구가 포함된 p 태그를 찾지 못했습니다.")
                 return None
 
             text_content = p_tag.get_text(strip=True)
@@ -132,10 +131,10 @@ class KituramiGasProvider(GasProvider):
                 base_fee_str = match.group(1).replace(",", "")
                 return float(base_fee_str)
 
-            _LOGGER.error("기본요금 안내 문구에서 요금 숫자를 찾지 못했습니다.")
+            LOGGER.error("기본요금 안내 문구에서 요금 숫자를 찾지 못했습니다.")
             return None
         except Exception as err:
-            _LOGGER.error("귀뚜라미에너지 기본요금 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("귀뚜라미에너지 기본요금 스크래핑 중 오류 발생: %s", err)
             return None
 
 
@@ -150,7 +149,7 @@ class KituramiGasProvider(GasProvider):
             
             # 조정된 종료일이 시작일보다 빨라지는 경우(예: 매월 1일), 조회를 건너뜁니다.
             if adjusted_end_date < start_date:
-                _LOGGER.debug(
+                LOGGER.debug(
                     "조정된 평균열량 조회 종료일(%s)이 시작일(%s)보다 빨라 조회를 생략합니다.",
                     adjusted_end_date, start_date
                 )
@@ -166,12 +165,12 @@ class KituramiGasProvider(GasProvider):
             
             heat_span = soup.select_one("div.contents_area > div.grey_box02.mb20 > span.blue")
             if not heat_span:
-                _LOGGER.error("평균열량 결과값이 포함된 span 태그를 찾지 못했습니다.")
+                LOGGER.error("평균열량 결과값이 포함된 span 태그를 찾지 못했습니다.")
                 return None
             
             return float(heat_span.get_text(strip=True))
         except Exception as err:
-            _LOGGER.error("%s ~ %s 기간의 귀뚜라미에너지 평균열량 조회 중 오류: %s", start_date, end_date, err)
+            LOGGER.error("%s ~ %s 기간의 귀뚜라미에너지 평균열량 조회 중 오류: %s", start_date, end_date, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -190,5 +189,12 @@ class KituramiGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: prev_heat,
             }
         
-        _LOGGER.error("귀뚜라미에너지의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("귀뚜라미에너지의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
+
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        귀뚜라미에너지의 취사/난방 경계값을 반환합니다.
+        귀뚜라미에너지는 취사/난방 요금 구분이 없으므로 0을 반환합니다.
+        """
+        return 0.0

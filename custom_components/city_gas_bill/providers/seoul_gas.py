@@ -16,10 +16,9 @@ from ..const import (
     # const.py에 정의된 데이터 키들을 가져와서 일관성을 유지합니다.
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
-    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING
+    DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class SeoulGasProvider(GasProvider):
     """
@@ -62,7 +61,7 @@ class SeoulGasProvider(GasProvider):
         # CSS 선택자를 사용하여 id가 'content'인 div 태그를 찾습니다.
         content_div = soup.select_one("#content")
         if not content_div:
-            _LOGGER.error("%s의 평균열량 데이터를 파싱하기 위한 메인 content div를 찾지 못했습니다.", month_label)
+            LOGGER.error("%s의 평균열량 데이터를 파싱하기 위한 메인 content div를 찾지 못했습니다.", month_label)
             return None
         
         # content div 안의 모든 <p> 태그(문단)를 순회합니다.
@@ -75,7 +74,7 @@ class SeoulGasProvider(GasProvider):
                     # 숫자를 찾았다면, 첫 번째 그룹(숫자 부분)을 반환합니다.
                     return match.group(1)
                     
-        _LOGGER.error("%s의 평균열량 데이터를 파싱하지 못했습니다.", month_label)
+        LOGGER.error("%s의 평균열량 데이터를 파싱하지 못했습니다.", month_label)
         return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -111,7 +110,7 @@ class SeoulGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: float(prev_heat_str)
             }
         except Exception as err:
-            _LOGGER.error("서울도시가스 평균열량 데이터 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("서울도시가스 평균열량 데이터 스크래핑 중 오류 발생: %s", err)
             return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
@@ -120,11 +119,11 @@ class SeoulGasProvider(GasProvider):
         테이블의 첫 두 행을 직접 참조하여 안정성을 높인 로직입니다.
         """
         if not self.region:
-            _LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
+            LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
             return None
         try:
             payload = {"gaspayArea": self.region}
-            _LOGGER.debug("서울도시가스 열량단가 조회 요청 (지역: %s), Payload: %s", self.region, payload)
+            LOGGER.debug("서울도시가스 열량단가 조회 요청 (지역: %s), Payload: %s", self.region, payload)
             
             async with self.websession.post(self.URL_PRICE, data=payload) as response:
                 response.raise_for_status()
@@ -132,7 +131,7 @@ class SeoulGasProvider(GasProvider):
                 
                 table = soup.select_one(".tblgas > table")
                 if not table:
-                    _LOGGER.error("서울도시가스 요금표 테이블을 찾지 못했습니다.")
+                    LOGGER.error("서울도시가스 요금표 테이블을 찾지 못했습니다.")
                     return None
                 
                 # 테이블 본문(tbody)에서 모든 행(tr)을 가져옵니다.
@@ -140,19 +139,19 @@ class SeoulGasProvider(GasProvider):
                 
                 # 최소 2개의 행이 있는지 확인합니다 (취사용, 난방용).
                 if len(rows) < 2:
-                    _LOGGER.error("서울도시가스 요금표에서 필요한 행(2개 이상)을 찾지 못했습니다.")
+                    LOGGER.error("서울도시가스 요금표에서 필요한 행(2개 이상)을 찾지 못했습니다.")
                     return None
 
                 # 첫 번째 행(취사용)에서 td들을 가져옵니다.
                 tds_cooking = rows[0].find_all("td")
                 if len(tds_cooking) < 2:
-                    _LOGGER.error("취사 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
+                    LOGGER.error("취사 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
                     return None
                 
                 # 두 번째 행(난방용)에서 td들을 가져옵니다.
                 tds_heating = rows[1].find_all("td")
                 if len(tds_heating) < 2:
-                    _LOGGER.error("난방 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
+                    LOGGER.error("난방 요금 행에서 필요한 열(2개 이상)을 찾지 못했습니다.")
                     return None
                     
                 # 각 셀의 텍스트를 숫자로 변환합니다.
@@ -165,7 +164,7 @@ class SeoulGasProvider(GasProvider):
                     prev_price_heating = float(tds_heating[0].get_text(strip=True))
                     curr_price_heating = float(tds_heating[1].get_text(strip=True))
                 except (ValueError, TypeError) as e:
-                    _LOGGER.error("요금표의 숫자 값을 변환하는 중 오류가 발생했습니다: %s", e)
+                    LOGGER.error("요금표의 숫자 값을 변환하는 중 오류가 발생했습니다: %s", e)
                     return None
 
                 # 최종 결과를 딕셔너리 형태로 반환합니다.
@@ -176,13 +175,13 @@ class SeoulGasProvider(GasProvider):
                     DATA_CURR_MONTH_PRICE_HEATING: curr_price_heating,
                 }
         except Exception as err:
-            _LOGGER.error("서울도시가스 열량단가 데이터 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("서울도시가스 열량단가 데이터 스크래핑 중 오류 발생: %s", err)
             return None
 
     async def scrape_base_fee(self) -> float | None:
         """서울도시가스 웹사이트에서 현재 적용되는 기본요금을 스크래핑합니다."""
         if not self.region:
-            _LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
             return None
         try:
             # 지역 코드를 포함하여 POST 요청을 보냅니다.
@@ -193,7 +192,7 @@ class SeoulGasProvider(GasProvider):
                 
                 content_div = soup.select_one("#content")
                 if not content_div:
-                    _LOGGER.error("서울도시가스 기본요금 스크래핑을 위한 #content 영역을 찾지 못했습니다.")
+                    LOGGER.error("서울도시가스 기본요금 스크래핑을 위한 #content 영역을 찾지 못했습니다.")
                     return None
                 
                 # #content 영역 내의 모든 li 태그를 순회하며 '주택용 기본요금' 텍스트를 찾습니다.
@@ -205,7 +204,7 @@ class SeoulGasProvider(GasProvider):
                         break
                 
                 if not base_fee_text:
-                    _LOGGER.error("기본요금 정보가 포함된 텍스트('주택용 기본요금')를 찾지 못했습니다.")
+                    LOGGER.error("기본요금 정보가 포함된 텍스트('주택용 기본요금')를 찾지 못했습니다.")
                     return None
 
                 # 정규식을 사용하여 텍스트에서 숫자(콤마 포함)를 추출합니다.
@@ -214,12 +213,19 @@ class SeoulGasProvider(GasProvider):
                     base_fee_str = match.group(1).replace(",", "")
                     return float(base_fee_str)
 
-                _LOGGER.error("기본요금 텍스트('%s')에서 요금 숫자를 추출하지 못했습니다.", base_fee_text)
+                LOGGER.error("기본요금 텍스트('%s')에서 요금 숫자를 추출하지 못했습니다.", base_fee_text)
                 return None
         
         except (ValueError, TypeError) as e:
-            _LOGGER.error("서울도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            LOGGER.error("서울도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("서울도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("서울도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
             return None
+
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        서울도시가스의 취사/난방 경계값을 반환합니다.
+        이 값은 고지서 기준 고정값인 516 MJ 입니다.
+        """
+        return 516.0

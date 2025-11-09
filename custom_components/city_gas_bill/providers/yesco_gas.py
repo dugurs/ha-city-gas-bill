@@ -16,9 +16,8 @@ from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class YescoGasProvider(GasProvider):
     """
@@ -57,7 +56,7 @@ class YescoGasProvider(GasProvider):
         특정 월의 '주택취사' 및 '주택난방' 열량단가를 조회하는 내부 헬퍼 함수입니다.
         """
         if not self.region:
-            _LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
+            LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않았습니다. 열량단가를 조회할 수 없습니다.")
             return None
             
         payload = {"id": "E0006", "I_DATAB": target_date.strftime("%Y%m01")}
@@ -81,13 +80,13 @@ class YescoGasProvider(GasProvider):
                     if 'cooking' in prices and 'heating' in prices:
                         return prices
                     
-                    _LOGGER.warning("%s 날짜의 주택취사/주택난방 단가 데이터를 모두 찾지 못했습니다. (지역코드: %s)", target_date, self.region)
+                    LOGGER.warning("%s 날짜의 주택취사/주택난방 단가 데이터를 모두 찾지 못했습니다. (지역코드: %s)", target_date, self.region)
                 else:
-                    _LOGGER.error("예스코 열량단가 API에서 오류 응답: %s", data.get("message"))
+                    LOGGER.error("예스코 열량단가 API에서 오류 응답: %s", data.get("message"))
                 
                 return None
         except Exception as err:
-            _LOGGER.error("%s 날짜의 예스코 열량단가 조회 중 오류 발생: %s", target_date, err)
+            LOGGER.error("%s 날짜의 예스코 열량단가 조회 중 오류 발생: %s", target_date, err)
             return None
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
@@ -108,10 +107,10 @@ class YescoGasProvider(GasProvider):
                 if data.get("success") and data["data"]["Parameters"].get("O_RTNCD") == "00":
                     return float(data["data"]["Parameters"]["O_CALORIEAV"])
                 else:
-                    _LOGGER.error("예스코 평균열량 API에서 오류 응답: %s", data.get("message"))
+                    LOGGER.error("예스코 평균열량 API에서 오류 응답: %s", data.get("message"))
                     return None
         except Exception as err:
-            _LOGGER.error("%s ~ %s 기간의 예스코 평균열량 조회 중 오류 발생: %s", start_date, end_date, err)
+            LOGGER.error("%s ~ %s 기간의 예스코 평균열량 조회 중 오류 발생: %s", start_date, end_date, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -130,7 +129,7 @@ class YescoGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: prev_heat,
             }
         
-        _LOGGER.error("예스코의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("예스코의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
@@ -150,13 +149,13 @@ class YescoGasProvider(GasProvider):
                 DATA_PREV_MONTH_PRICE_HEATING: prev_prices['heating'],
             }
         
-        _LOGGER.error("예스코의 열량단가 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("예스코의 열량단가 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
         
     async def scrape_base_fee(self) -> float | None:
         """예스코 API에서 현재 지역에 맞는 기본요금을 가져옵니다."""
         if not self.region:
-            _LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            LOGGER.error("예스코 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
             return None
 
         today = date.today()
@@ -175,14 +174,21 @@ class YescoGasProvider(GasProvider):
                             return float(item["AMOUNT_PERC"])
                     
                     # 루프를 다 돌아도 일치하는 항목이 없는 경우
-                    _LOGGER.error("예스코 API 응답에서 '%s' 지역의 기본료 항목을 찾지 못했습니다.", self.REGIONS.get(self.region, self.region))
+                    LOGGER.error("예스코 API 응답에서 '%s' 지역의 기본료 항목을 찾지 못했습니다.", self.REGIONS.get(self.region, self.region))
                     return None
                 else:
-                    _LOGGER.error("예스코 기본요금 조회 API에서 오류 응답: %s", data.get("message"))
+                    LOGGER.error("예스코 기본요금 조회 API에서 오류 응답: %s", data.get("message"))
                     return None
         except (ValueError, TypeError, KeyError) as e:
-            _LOGGER.error("예스코 기본요금 데이터 파싱 중 오류 발생: %s", e)
+            LOGGER.error("예스코 기본요금 데이터 파싱 중 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("예스코 기본요금 조회 중 오류 발생: %s", err)
+            LOGGER.error("예스코 기본요금 조회 중 오류 발생: %s", err)
             return None
+
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        예스코의 취사/난방 경계값을 반환합니다.
+        이 값은 고지서 기준 고정값인 516 MJ 입니다.
+        """
+        return 516.0

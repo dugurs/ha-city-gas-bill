@@ -19,9 +19,8 @@ from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class IncheonGasProvider(GasProvider):
     """
@@ -76,7 +75,7 @@ class IncheonGasProvider(GasProvider):
                 # s0 변수 안에는 결과값이 담긴 HTML 조각이 들어있습니다.
                 s0_match = re.search(r'var s0="(.+?)";', response_text, re.DOTALL)
                 if not s0_match:
-                    _LOGGER.warning("DWR 응답에서 s0 변수(열량 데이터)를 찾지 못했습니다.")
+                    LOGGER.warning("DWR 응답에서 s0 변수(열량 데이터)를 찾지 못했습니다.")
                     return None
                 
                 html_content = s0_match.group(1) # 추출한 HTML 조각
@@ -86,10 +85,10 @@ class IncheonGasProvider(GasProvider):
                 if heat_match:
                     return float(heat_match.group(1))
                 
-                _LOGGER.warning("DWR 응답 HTML에서 열량 값을 찾지 못했습니다.")
+                LOGGER.warning("DWR 응답 HTML에서 열량 값을 찾지 못했습니다.")
                 return None
         except Exception as err:
-            _LOGGER.error("%s부터 %s까지의 열량 데이터 조회 중 오류 발생: %s", start_date, end_date, err)
+            LOGGER.error("%s부터 %s까지의 열량 데이터 조회 중 오류 발생: %s", start_date, end_date, err)
             return None
 
     async def _fetch_price_for_date(self, target_date: date, usage_type_str: str) -> float | None:
@@ -120,10 +119,10 @@ class IncheonGasProvider(GasProvider):
                 if match:
                     return float(match.group(1))
                 
-                _LOGGER.warning("%s 날짜의 %s 단가 데이터(s6)를 DWR 응답에서 찾지 못했습니다.", target_date, usage_type_str)
+                LOGGER.warning("%s 날짜의 %s 단가 데이터(s6)를 DWR 응답에서 찾지 못했습니다.", target_date, usage_type_str)
                 return None
         except Exception as err:
-            _LOGGER.error("%s 날짜의 %s 단가 조회 중 오류 발생: %s", target_date, usage_type_str, err)
+            LOGGER.error("%s 날짜의 %s 단가 조회 중 오류 발생: %s", target_date, usage_type_str, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -142,7 +141,7 @@ class IncheonGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: prev_heat,
             }
         
-        _LOGGER.error("인천도시가스의 열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("인천도시가스의 열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
@@ -168,7 +167,7 @@ class IncheonGasProvider(GasProvider):
                 DATA_PREV_MONTH_PRICE_HEATING: prev_heating,
             }
         
-        _LOGGER.error("인천도시가스의 취사/난방 단가 데이터를 모두 가져오지 못했습니다.")
+        LOGGER.error("인천도시가스의 취사/난방 단가 데이터를 모두 가져오지 못했습니다.")
         return None
 
     async def scrape_base_fee(self) -> float | None:
@@ -177,7 +176,7 @@ class IncheonGasProvider(GasProvider):
         전체 HTML 응답에서 '인천 xxx원/월' 또는 '경기 xxx원/월' 패턴을 정규식으로 찾습니다.
         """
         if not self.region:
-            _LOGGER.error("인천도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            LOGGER.error("인천도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
             return None
 
         try:
@@ -188,7 +187,7 @@ class IncheonGasProvider(GasProvider):
             # 설정된 지역 코드로부터 지역 이름("인천" 또는 "경기")을 가져옵니다.
             region_name = self.REGIONS.get(self.region)
             if not region_name:
-                _LOGGER.warning("알 수 없는 지역 코드(%s)입니다. 기본요금을 조회할 수 없습니다.", self.region)
+                LOGGER.warning("알 수 없는 지역 코드(%s)입니다. 기본요금을 조회할 수 없습니다.", self.region)
                 return None
             
             # 지역 이름 뒤에 오는 숫자 요금을 찾기 위한 정규식 패턴을 생성합니다.
@@ -202,12 +201,19 @@ class IncheonGasProvider(GasProvider):
                 return float(base_fee_str)
 
             # 정규식에 맞는 패턴을 찾지 못한 경우
-            _LOGGER.error("기본요금 안내 문구에서 '%s' 지역의 요금 패턴을 찾지 못했습니다.", region_name)
+            LOGGER.error("기본요금 안내 문구에서 '%s' 지역의 요금 패턴을 찾지 못했습니다.", region_name)
             return None
             
         except (ValueError, TypeError) as e:
-            _LOGGER.error("인천도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            LOGGER.error("인천도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("인천도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("인천도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
             return None
+            
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        인천도시가스의 취사/난방 경계값을 반환합니다.
+        이 값은 고지서 기준 고정값인 516 MJ 입니다.
+        """
+        return 516.0

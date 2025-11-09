@@ -191,3 +191,64 @@ f_date=2025-11-01&t_date=2025-11-05
 xpath
 /html/body/div[2]/div/div[2]/span
 가 평균열량
+
+
+## 공급사 추가
+대륜이엔이스
+
+### 지역 (regionSeq)
+서울
+경기
+
+### 중양난방 
+미지원
+
+### 기본요금
+1250
+
+### 취사난방경계
+0
+
+### 열량단가 스크래핑
+지원 불가.
+지원블가 경고 로그
+https://www.daeryunens.com/daeryunens/bbs/bbs_list.asp?bbs_code=54 에서 확인 가능
+
+### 평균열량 스크랩핑
+Request URL
+https://www.daeryunens.com/daeryunens/chargespaid/temperature.asp?start_date=2025-11-01&end_date=2025-11-09
+Request Method
+GET
+xpath
+//*[@id="tempFrm"]/div/p[2]/span[2]
+test 42.438&nbsp;MJN
+값 42.438
+
+
+
+
+## 공급사 추가
+참밫충북도시가스
+
+### 지역 (regionSeq)
+충북
+
+### 중양난방 
+지원
+
+### 기본요금 스크랩핑
+https://www.ccbgas.co.kr/charge/charge01.do
+text <li>기본요금 : 취사용, 개별난방, 중앙난방(1,050원/월)</li>
+값 1,050
+
+### 취사난방경계
+0
+
+### 열량단가 스크래핑
+https://www.ccbgas.co.kr/charge/charge01.do?ym=2025090
+취사용 xpath /html/body/div[2]/section[3]/table/tbody/tr[1]/td[3]
+난방용 xpath /html/body/div[2]/section[3]/table/tbody/tr[2]/td[2]
+중앙용 xpath /html/body/div[2]/section[3]/table/tbody/tr[3]/td[2]
+
+### 평균열량 스크래핑
+지원하지 않음.

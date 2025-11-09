@@ -17,9 +17,8 @@ from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class BusanGasProvider(GasProvider):
     """
@@ -56,7 +55,7 @@ class BusanGasProvider(GasProvider):
             # 요금표가 들어있는 테이블을 찾습니다.
             table = soup.select_one("#contents > div:nth-of-type(4) > table")
             if not table:
-                _LOGGER.error("부산도시가스 요금표 테이블을 찾지 못했습니다.")
+                LOGGER.error("부산도시가스 요금표 테이블을 찾지 못했습니다.")
                 return None
 
             rows = table.select("tbody tr")
@@ -82,10 +81,10 @@ class BusanGasProvider(GasProvider):
             if 'cooking' in prices and 'heating' in prices:
                 return prices
             
-            _LOGGER.error("부산도시가스 요금표 HTML에서 취사/난방 단가(%s)를 모두 찾지 못했습니다.", heating_label)
+            LOGGER.error("부산도시가스 요금표 HTML에서 취사/난방 단가(%s)를 모두 찾지 못했습니다.", heating_label)
             return None
         except (ValueError, TypeError, IndexError) as e:
-            _LOGGER.error("부산도시가스 요금표 파싱 중 오류 발생: %s", e)
+            LOGGER.error("부산도시가스 요금표 파싱 중 오류 발생: %s", e)
             return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
@@ -93,7 +92,7 @@ class BusanGasProvider(GasProvider):
         부산도시가스 웹사이트에서 전월 및 당월의 열량단가를 스크래핑합니다.
         """
         if not self.region:
-            _LOGGER.error("부산도시가스 공급사에 지역 코드가 설정되지 않아 열량단가를 조회할 수 없습니다.")
+            LOGGER.error("부산도시가스 공급사에 지역 코드가 설정되지 않아 열량단가를 조회할 수 없습니다.")
             return None
         
         # 사용자가 설정에서 선택한 용도에 따라 파싱할 난방 요금의 테이블 행 이름 결정
@@ -107,7 +106,7 @@ class BusanGasProvider(GasProvider):
 
             options = soup.select("select#item-select option")
             if not options:
-                _LOGGER.error("요금 조회 월(item-select) 목록을 찾지 못했습니다.")
+                LOGGER.error("요금 조회 월(item-select) 목록을 찾지 못했습니다.")
                 return None
 
             # 2. 당월과 전월에 해당하는 `item-select` 코드를 찾습니다.
@@ -119,7 +118,7 @@ class BusanGasProvider(GasProvider):
             prev_month_code = next((opt['value'] for opt in options if opt.text == prev_month_str), None)
 
             if not curr_month_code or not prev_month_code:
-                _LOGGER.error("당월(%s) 또는 전월(%s)의 요금 코드(item-select)를 찾지 못했습니다.", curr_month_str, prev_month_str)
+                LOGGER.error("당월(%s) 또는 전월(%s)의 요금 코드(item-select)를 찾지 못했습니다.", curr_month_str, prev_month_str)
                 return None
             
             # 3. 찾은 코드를 사용하여 각 월의 요금 정보를 요청하고 파싱합니다.
@@ -146,7 +145,7 @@ class BusanGasProvider(GasProvider):
                 DATA_PREV_MONTH_PRICE_HEATING: prev_prices['heating'],
             }
         except Exception as err:
-            _LOGGER.error("부산도시가스 열량단가 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("부산도시가스 열량단가 스크래핑 중 오류 발생: %s", err)
             return None
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
@@ -168,10 +167,10 @@ class BusanGasProvider(GasProvider):
                     # API 응답에서 평균열량(E_CALOR) 값을 추출하여 float으로 변환
                     return float(data["list"][0]["E_CALOR"])
 
-                _LOGGER.warning("부산도시가스 평균열량 API 응답에 'list' 데이터가 없습니다.")
+                LOGGER.warning("부산도시가스 평균열량 API 응답에 'list' 데이터가 없습니다.")
                 return None
         except Exception as err:
-            _LOGGER.error("%s ~ %s 기간의 부산도시가스 평균열량 조회 중 오류: %s", start_date, end_date, err)
+            LOGGER.error("%s ~ %s 기간의 부산도시가스 평균열량 조회 중 오류: %s", start_date, end_date, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -193,7 +192,7 @@ class BusanGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: prev_heat,
             }
 
-        _LOGGER.error("부산도시가스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("부산도시가스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
 
     async def scrape_base_fee(self) -> float | None:
@@ -212,7 +211,7 @@ class BusanGasProvider(GasProvider):
             script_match = re.search(r'\$\("#baseDesc"\)\.html\(([\'"])(.*?)\1\)', html_text, re.DOTALL)
             
             if not script_match:
-                _LOGGER.error("부산도시가스 기본요금 JavaScript 코드('#baseDesc').html(...)를 찾지 못했습니다.")
+                LOGGER.error("부산도시가스 기본요금 JavaScript 코드('#baseDesc').html(...)를 찾지 못했습니다.")
                 return None
 
             # 정규식의 두 번째 그룹이 실제 안내 문구 내용입니다.
@@ -226,12 +225,19 @@ class BusanGasProvider(GasProvider):
                 base_fee_str = fee_match.group(1).replace(",", "")
                 return float(base_fee_str)
 
-            _LOGGER.error("기본요금 스크립트 내용에서 요금 숫자를 찾지 못했습니다: %s", text_content)
+            LOGGER.error("기본요금 스크립트 내용에서 요금 숫자를 찾지 못했습니다: %s", text_content)
             return None
 
         except (ValueError, TypeError) as e:
-            _LOGGER.error("부산도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            LOGGER.error("부산도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("부산도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("부산도시가스 기본요금 스크래핑 중 오류 발생: %s", err)
             return None
+
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        부산도시가스의 취사/난방 경계값을 반환합니다.
+        '취사전용'과 '난방전용' 요금제가 구분되어 있으므로 경계값은 0입니다.
+        """
+        return 0.0

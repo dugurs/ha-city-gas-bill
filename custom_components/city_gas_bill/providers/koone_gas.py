@@ -17,9 +17,8 @@ from ..const import (
     DATA_PREV_MONTH_HEAT, DATA_CURR_MONTH_HEAT,
     DATA_PREV_MONTH_PRICE_COOKING, DATA_PREV_MONTH_PRICE_HEATING,
     DATA_CURR_MONTH_PRICE_COOKING, DATA_CURR_MONTH_PRICE_HEATING,
+    LOGGER, # 공용 로거 사용
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 class KooneGasProvider(GasProvider):
     """
@@ -56,7 +55,7 @@ class KooneGasProvider(GasProvider):
             # 요금표가 들어있는 테이블을 찾습니다.
             table = soup.select_one("#contents > div:nth-of-type(4) > table")
             if not table:
-                _LOGGER.error("코원에너지서비스 요금표 테이블을 찾지 못했습니다.")
+                LOGGER.error("코원에너지서비스 요금표 테이블을 찾지 못했습니다.")
                 return None
 
             rows = table.select("tbody tr")
@@ -80,10 +79,10 @@ class KooneGasProvider(GasProvider):
             if 'cooking' in prices and 'heating' in prices:
                 return prices
             
-            _LOGGER.error("코원에너지서비스 요금표 HTML에서 취사/난방 단가를 모두 찾지 못했습니다.")
+            LOGGER.error("코원에너지서비스 요금표 HTML에서 취사/난방 단가를 모두 찾지 못했습니다.")
             return None
         except (ValueError, TypeError, IndexError) as e:
-            _LOGGER.error("코원에너지서비스 요금표 파싱 중 오류 발생: %s", e)
+            LOGGER.error("코원에너지서비스 요금표 파싱 중 오류 발생: %s", e)
             return None
 
     async def scrape_price_data(self) -> dict[str, float] | None:
@@ -91,7 +90,7 @@ class KooneGasProvider(GasProvider):
         코원에너지서비스 웹사이트에서 전월 및 당월의 열량단가를 스크래핑합니다.
         """
         if not self.region:
-            _LOGGER.error("코원에너지서비스 공급사에 지역 코드가 설정되지 않아 열량단가를 조회할 수 없습니다.")
+            LOGGER.error("코원에너지서비스 공급사에 지역 코드가 설정되지 않아 열량단가를 조회할 수 없습니다.")
             return None
 
         try:
@@ -102,7 +101,7 @@ class KooneGasProvider(GasProvider):
 
             options = soup.select("select#item-select option")
             if not options:
-                _LOGGER.error("요금 조회 월(item-select) 목록을 찾지 못했습니다.")
+                LOGGER.error("요금 조회 월(item-select) 목록을 찾지 못했습니다.")
                 return None
 
             # 2. 당월과 전월에 해당하는 `item-select` 코드를 찾습니다.
@@ -114,7 +113,7 @@ class KooneGasProvider(GasProvider):
             prev_month_code = next((opt['value'] for opt in options if opt.text == prev_month_str), None)
 
             if not curr_month_code or not prev_month_code:
-                _LOGGER.error("당월(%s) 또는 전월(%s)의 요금 코드(item-select)를 찾지 못했습니다.", curr_month_str, prev_month_str)
+                LOGGER.error("당월(%s) 또는 전월(%s)의 요금 코드(item-select)를 찾지 못했습니다.", curr_month_str, prev_month_str)
                 return None
             
             # 3. 찾은 코드를 사용하여 각 월의 요금 정보를 요청하고 파싱합니다.
@@ -141,7 +140,7 @@ class KooneGasProvider(GasProvider):
                 DATA_PREV_MONTH_PRICE_HEATING: prev_prices['heating'],
             }
         except Exception as err:
-            _LOGGER.error("코원에너지서비스 열량단가 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("코원에너지서비스 열량단가 스크래핑 중 오류 발생: %s", err)
             return None
 
     async def _fetch_heat_for_period(self, start_date: date, end_date: date) -> float | None:
@@ -162,10 +161,10 @@ class KooneGasProvider(GasProvider):
                     # API 응답에서 평균열량(E_CALOR) 값을 추출하여 float으로 변환
                     return float(data["list"][0]["E_CALOR"])
 
-                _LOGGER.warning("코원에너지서비스 평균열량 API 응답에 'list' 데이터가 없습니다.")
+                LOGGER.warning("코원에너지서비스 평균열량 API 응답에 'list' 데이터가 없습니다.")
                 return None
         except Exception as err:
-            _LOGGER.error("%s ~ %s 기간의 코원에너지서비스 평균열량 조회 중 오류: %s", start_date, end_date, err)
+            LOGGER.error("%s ~ %s 기간의 코원에너지서비스 평균열량 조회 중 오류: %s", start_date, end_date, err)
             return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -187,7 +186,7 @@ class KooneGasProvider(GasProvider):
                 DATA_PREV_MONTH_HEAT: prev_heat,
             }
 
-        _LOGGER.error("코원에너지서비스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
+        LOGGER.error("코원에너지서비스의 평균열량 데이터를 하나 또는 모두 가져오지 못했습니다.")
         return None
 
     async def scrape_base_fee(self) -> float | None:
@@ -196,7 +195,7 @@ class KooneGasProvider(GasProvider):
         요금표 테이블에서 '주택용 취사' 항목의 기본요금을 기준으로 합니다.
         """
         if not self.region:
-            _LOGGER.error("코원에너지서비스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
+            LOGGER.error("코원에너지서비스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
             return None
 
         try:
@@ -209,7 +208,7 @@ class KooneGasProvider(GasProvider):
             # 요금표가 들어있는 테이블을 찾습니다.
             table = soup.select_one("#contents > div:nth-of-type(4) > table")
             if not table:
-                _LOGGER.error("코원에너지서비스 기본요금 테이블을 찾지 못했습니다.")
+                LOGGER.error("코원에너지서비스 기본요금 테이블을 찾지 못했습니다.")
                 return None
 
             rows = table.select("tbody tr")
@@ -221,12 +220,30 @@ class KooneGasProvider(GasProvider):
                     return float(base_fee_str)
 
             # 루프를 다 돌아도 '주택용 취사' 행을 찾지 못한 경우
-            _LOGGER.error("코원에너지서비스 요금표에서 '주택용 취사' 행을 찾지 못해 기본요금을 조회할 수 없습니다.")
+            LOGGER.error("코원에너지서비스 요금표에서 '주택용 취사' 행을 찾지 못해 기본요금을 조회할 수 없습니다.")
             return None
 
         except (ValueError, TypeError, IndexError) as e:
-            _LOGGER.error("코원에너지서비스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
+            LOGGER.error("코원에너지서비스 기본요금 파싱 중 값 변환 오류 발생: %s", e)
             return None
         except Exception as err:
-            _LOGGER.error("코원에너지서비스 기본요금 스크래핑 중 오류 발생: %s", err)
+            LOGGER.error("코원에너지서비스 기본요금 스크래핑 중 오류 발생: %s", err)
             return None
+
+    # --- START: 수정된 코드 ---
+    async def scrape_cooking_heating_boundary(self) -> float | None:
+        """
+        코원에너지서비스의 지역별 취사/난방 경계값을 반환합니다.
+        이 값은 웹사이트에 명시되어 있지 않아, 고정값으로 관리합니다.
+        - 경기(275): 516 MJ
+        - 서울(274): 0 MJ (경계 없음)
+        """
+        if self.region == "275": # 경기
+            return 516.0
+        if self.region == "274": # 서울
+            return 0.0
+        
+        # 지역 코드가 없거나 예상치 못한 값일 경우 기본값 0을 반환
+        LOGGER.warning("코원에너지서비스에 알 수 없는 지역코드(%s)가 설정되어 취사난방경계값을 0으로 설정합니다.", self.region)
+        return 0.0
+    # --- END: 수정된 코드 ---
