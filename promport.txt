@@ -7,6 +7,8 @@ http://www.citygas.or.kr/company/situation.jsp
 코드 수정시 수정되지 않음 부분은 변경하지 않고 그대로 보여주기. 주석, 코드스타일 모두.
 코드 작성시 코드 재활용을 고려하여 작성 하기.
 코드 추가시 한글 주석 포함하기.
+기존 코드 주석이 부실한경우 주석 보강.
+
 
 ### number 수정
 전월열량단가,당원열량단가를
@@ -278,3 +280,134 @@ https://www.ccbgas.co.kr/charge/charge01.do?ym=2025090
 기존 중앙난방(공동)을 중앙난방(공동열전용) 으로 수정하고
 일단 중앙난방(공동열병합용)을 중앙난방(공동열전용) 값으로 같게 설정
 필요한경우 분리 스크랩 할 예정임
+
+
+
+
+
+
+## 공급사 추가
+충청에너지서비스 (SK E&S)
+
+### 지역 (regionSeq)
+충청
+
+### 중양난방 
+지원
+
+### 취사난방경계
+0
+
+### 기본요금
+Request URL
+https://www.skens.com/cheongju/rate/guide.do
+Request Method
+GET
+xpath
+//*[@id="contents"]/div[4]/table/tbody/tr[1]/td[2]
+test가 기본요금
+
+
+### 열량단가 스크래핑
+
+#### 열량단가
+
+https://www.skens.com/cheongju/rate/guide.do
+Request Method
+POST
+Payload
+regionSeq=279&seq=0&item-select=3008
+필요data
+xpath
+//*[@id="contents"]/div[4]/table/tbody/tr[1]/td[3] 취사전용
+//*[@id="contents"]/div[4]/table/tbody/tr[2]/td[3] 개별난방
+//*[@id="contents"]/div[4]/table/tbody/tr[3]/td[3] 중앙난방
+
+그리고 전월 당월 구분은 item-select임
+xpath
+//*[@id="item-select"]
+하위 options 
+text가 년월일
+필요한 년월의 value가 Payload의 item-select에사용.
+<select id="item-select" name="item-select" onchange="javascript:onSearch()">
+<option value="3009" selected="selected">2025-11-01</option>
+<option value="2986">2025-10-01</option>
+<option value="2967">2025-09-01</option>
+<option value="2949">2025-08-01</option>
+<option value="2927">2025-07-01</option>
+<option value="2887">2025-06-01</option>
+<option value="2866">2025-05-01</option>
+<option value="2842">2025-04-01</option>
+<option value="2783">2025-03-01</option>
+<option value="2742">2025-02-01</option>
+</select>
+
+### 평균열량단가
+Request URL
+https://www.skens.com/cheongju/caloric/call_EBPP_044.do?v=1762758975222
+Request Method
+POST
+Payload
+I_FDATE=20251101&I_TDATE=20251109&I_CALOR=D000
+respones
+{"list":[{"COMPNAME":"충청에너지서비스","I_FDATE":"20251101","O_FDATE":"20251101","COMPDESC":"충청에너지서비스","I_CALOR":"D000","O_TDATE":"20251109","I_TDATE":"20251109","E_CALOR":"42.612000"}]}
+필요 data
+E_CALOR
+
+
+
+
+
+## 공급사 추가
+미래엔서해에너지
+
+### 지역 (regionSeq)
+충남
+
+### 중양난방 
+지원
+
+### 취사난방경계
+0
+
+### 기본요금
+1000
+
+### 평균열량 스크랩링
+https://miraense.com/index.php?page=html&mc=44&stDate=2025-11-01&endDate=2025-11-09
+//*[@id="wrap2"]/div[2]/div/div[2]/form/div/div.average_rbox/span.blue
+
+### 열량단가 스크래핑
+지원불가
+
+
+
+
+
+## 공급사 추가
+JB
+
+### 지역 (regionSeq)
+충남 1
+세종 2
+
+### 중양난방 
+지원
+
+### 취사난방경계
+522.51
+
+### 기본요금
+1000
+
+### 평균열량 스크랩링
+지원불가
+
+### 열량단가 스크래핑
+https://www.jbcorporation.com/index/inquiry_01.php?type=1 충남
+https://www.jbcorporation.com/index/inquiry_01.php?type=2 세종
+
+//*[@id="realCont_02"]/table[1]/tbody/tr[1]/td[2] 취사용
+//*[@id="realCont_02"]/table[1]/tbody/tr[2]/td[2] 취사전용
+//*[@id="realCont_02"]/table[1]/tbody/tr[3]/td[2] 개별난방
+//*[@id="realCont_02"]/table[1]/tbody/tr[4]/td[2] 중앙난방

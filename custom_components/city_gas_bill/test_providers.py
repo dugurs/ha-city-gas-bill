@@ -44,6 +44,11 @@ from city_gas_bill.providers.kiturami_gas import KituramiGasProvider
 from city_gas_bill.providers.samchully_gas import SamchullyGasProvider
 from city_gas_bill.providers.daeryun_ens import DaeryunENSProvider
 from city_gas_bill.providers.chungbuk_gas import ChungbukGasProvider
+from city_gas_bill.providers.chungcheong_gas import ChungcheongGasProvider
+# --- START: 추가된 코드 ---
+from city_gas_bill.providers.miraen_seohae_energy import MiraenSeoHaeEnergyProvider
+# --- END: 추가된 코드 ---
+
 
 # --- 설정 끝 ---
 
@@ -128,18 +133,44 @@ PROVIDERS_TO_TEST = [
     #     "region": "seoul",
     #     "heating_type": "residential",
     # },
+    # {
+    #     "name": "참빛충북도시가스 (주택난방)",
+    #     "class": ChungbukGasProvider,
+    #     "region": "chungbuk",
+    #     "heating_type": "residential",
+    # },
+    # {
+    #     "name": "참빛충북도시가스 (중앙난방)",
+    #     "class": ChungbukGasProvider,
+    #     "region": "chungbuk",
+    #     "heating_type": "central",
+    # },
+    # {
+    #     "name": "충청에너지서비스 (주택난방)",
+    #     "class": ChungcheongGasProvider,
+    #     "region": "279", # 충청 지역 코드
+    #     "heating_type": "residential",
+    # },
+    # {
+    #     "name": "충청에너지서비스 (중앙난방)",
+    #     "class": ChungcheongGasProvider,
+    #     "region": "279", # 충청 지역 코드
+    #     "heating_type": "central_cogeneration", # 중앙난방(공동열전용)
+    # },
+    # --- START: 추가된 테스트 케이스 ---
     {
-        "name": "참빛충북도시가스 (주택난방)",
-        "class": ChungbukGasProvider,
-        "region": "chungbuk",
+        "name": "미래엔서해에너지 (주택난방)",
+        "class": MiraenSeoHaeEnergyProvider,
+        "region": "chungnam",
         "heating_type": "residential",
     },
     {
-        "name": "참빛충북도시가스 (중앙난방)",
-        "class": ChungbukGasProvider,
-        "region": "chungbuk",
-        "heating_type": "central",
+        "name": "미래엔서해에너지 (중앙난방)",
+        "class": MiraenSeoHaeEnergyProvider,
+        "region": "chungnam",
+        "heating_type": "central_cogeneration",
     },
+    # --- END: 추가된 테스트 케이스 ---
 ]
 # ---
 
@@ -172,7 +203,7 @@ async def run_provider_test(session, config):
         price_data = await provider.scrape_price_data()
         # None일 경우만 실패로 처리하고, 빈 딕셔너리({})는 성공(변동 없음)으로 간주합니다.
         if price_data is not None:
-            logging.info(f"✅ [성공] 열량단가: {price_data if price_data else '변동 없음'}")
+            logging.info(f"✅ [성공] 열량단가: {price_data if price_data else '자동 조회를 지원하지 않음'}")
         else:
             # 의도적으로 None을 반환하는 경우 경고로 처리합니다.
             logging.warning("⚠️ [알림] 열량단가 자동 조회를 지원하지 않거나 실패했습니다 (결과: None).")
