@@ -4,10 +4,10 @@ http://www.citygas.or.kr/company/situation.jsp
 
 
 ### 코드 작성 지침
-코드 수정시 수정되지 않음 부분은 변경하지 않고 그대로 보여주기. 주석, 코드스타일 모두.
+코드 수정시 수정되지 않음 부분은 변경하지 않고 코드, 주석, 코드스타일 모두 그대로 유지하기.
 코드 작성시 코드 재활용을 고려하여 작성 하기.
-코드 추가시 한글 주석 포함하기.
-기존 코드 주석이 부실한경우 주석 보강.
+코드 추가시 자세한 한글 주석 포함하기.
+
 
 
 ### number 수정
@@ -411,3 +411,36 @@ https://www.jbcorporation.com/index/inquiry_01.php?type=2 세종
 //*[@id="realCont_02"]/table[1]/tbody/tr[2]/td[2] 취사전용
 //*[@id="realCont_02"]/table[1]/tbody/tr[3]/td[2] 개별난방
 //*[@id="realCont_02"]/table[1]/tbody/tr[4]/td[2] 중앙난방
+
+
+
+검침추기를 bimonthly_cycle 에서 reading_cycle 로변경
+CONF_BIMONTHLY_CYCLE 를 CONF_READING_CYCLE 로변경
+센서명을
+      "bimonthly_usage": { "name": "격월 가스 사용량" },
+      "bimonthly_bill": { "name": "격월 사용 요금" },
+      "bimonthly_previous_bill": { "name": "격월 직전 사용 요금" },
+      "bimonthly_estimated_usage": { "name": "격월 예상 사용량" },
+      "bimonthly_estimated_bill": { "name": "격월 예상 요금" }
+에서 
+      "periodic_usage": { "name": "정기 가스 사용량" },
+      "periodic_bill": { "name": "정기 사용 요금" },
+      "periodic_previous_bill": { "name": "정기 직전 사용 요금" },
+      "periodic_estimated_usage": { "name": "정기 예상 사용량" },
+      "periodic_estimated_bill": { "name": "정기 예상 요금" }
+변경
+
+
+
+검침 주기
+3개월 - 1,4,7,10월
+3개월 - 2,5,8,11월
+3개월 - 3,6,9,12월
+추가하고
+
+3개월 옵션 선택시에는
+정기 직전 사용 요금과 같은 기능을 하는
+정기 전전 사용 요금 센서를 추가하려고해 
+
+검토해줘
+

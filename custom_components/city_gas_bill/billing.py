@@ -4,20 +4,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 import calendar
 from dateutil.relativedelta import relativedelta
-import math # math.floor를 사용하기 위해 추가
-
+import math
 
 class GasBillCalculator:
-    """가스 요금 계산을 담당하는 공용 계산기 클래스.
-
-    - 검침 주기(검침일)를 기준으로 기간 분할(전월/당월 일수)을 계산합니다.
-    - 보정계수와 열량/단가 정보를 받아 총 요금을 산출합니다.
-    - 격월(odd/even) 결제 사이클의 합산 여부 판단/집계를 제공합니다.
-    """
+    """가스 요금 계산을 담당하는 공용 계산기 클래스."""
 
     def __init__(self, reading_day: int) -> None:
         self._reading_day = reading_day
 
+    # ... (기존 get_last_reading_date, get_next_reading_date, split_days_for_period, compute_total_bill_from_usage 메소드는 그대로 유지) ...
     def get_last_reading_date(self, today: date) -> date:
         """오늘 날짜와 설정된 검침일을 바탕으로 직전 검침일을 반환합니다.
 
@@ -116,9 +111,7 @@ class GasBillCalculator:
             # 3-2. 난방전용: 모든 사용량을 난방 단가로 계산
             prev_heating_fee = prev_usage_mj * prev_price_heating
             curr_heating_fee = curr_usage_mj * curr_price_heating
-
-        else: # usage_type == "combined" (기본값)
-            # 3-3. 취사+난방: 경계값을 사용하여 분리 계산
+        else:
             effective_boundary = cooking_heating_boundary
             if prev_price_cooking == prev_price_heating and curr_price_cooking == curr_price_heating:
                 effective_boundary = 0.0
@@ -174,24 +167,43 @@ class GasBillCalculator:
         })
         return final_total_fee, attrs
 
-
-    # -------- 격월 헬퍼 --------
+    # -------- 정기(격월/3개월) 헬퍼 --------
     @staticmethod
-    def is_billing_month(today: date, bimonthly_cycle: str | None) -> bool:
-        """해당 날짜가 격월 결제 사이클의 청구월인지 여부를 반환합니다."""
-        if not bimonthly_cycle or bimonthly_cycle == "disabled":
+    def is_billing_month(today: date, reading_cycle: str | None) -> bool:
+        """해당 날짜가 정기 결제 사이클의 청구월인지 여부를 반환합니다."""
+        if not reading_cycle or reading_cycle == "disabled":
             return False
-        is_odd = today.month % 2 == 1
-        is_even = not is_odd
-        if bimonthly_cycle == "odd":
-            return is_odd
-        if bimonthly_cycle == "even":
-            return is_even
+        
+        month = today.month
+        
+        # 격월
+        if reading_cycle == "odd": # 홀수월
+            return month % 2 == 1
+        if reading_cycle == "even": # 짝수월
+            return month % 2 == 0
+            
+        # 3개월 (분기)
+        if reading_cycle == "quarterly_1": # 1, 4, 7, 10월
+            return month % 3 == 1
+        if reading_cycle == "quarterly_2": # 2, 5, 8, 11월
+            return month % 3 == 2
+        if reading_cycle == "quarterly_3": # 3, 6, 9, 12월
+            return month % 3 == 0
+            
         return False
 
     @classmethod
-    def aggregate_bimonthly(cls, current_value: float, prev_value: float, today: date, bimonthly_cycle: str | None) -> float:
-        """격월 청구월에는 직전값과 합산, 그 외에는 현재값만 반환합니다."""
-        if cls.is_billing_month(today, bimonthly_cycle):
+    def aggregate_periodic(cls, current_value: float, prev_value: float, today: date, reading_cycle: str | None, pre_prev_value: float = 0.0) -> float:
+        """
+        정기 청구월에는 합산값을, 그 외에는 현재값만 반환합니다.
+        - 격월: 현재 + 전월
+        - 3개월: 현재 + 전월 + 전전월
+        """
+        if cls.is_billing_month(today, reading_cycle):
+            # 3개월 주기의 경우 3달치 합산
+            if reading_cycle in ["quarterly_1", "quarterly_2", "quarterly_3"]:
+                return current_value + prev_value + pre_prev_value
+            # 격월(odd/even)의 경우 2달치 합산
             return current_value + prev_value
+            
         return current_value

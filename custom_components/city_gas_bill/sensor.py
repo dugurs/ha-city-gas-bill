@@ -18,7 +18,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, State, callback, Event
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -26,7 +26,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 from .const import (
     DOMAIN, LOGGER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME,
-    EVENT_BILL_RESET, CONF_PROVIDER, CONF_BIMONTHLY_CYCLE, CONF_USAGE_TYPE,
+    EVENT_BILL_RESET, CONF_PROVIDER, CONF_READING_CYCLE, CONF_USAGE_TYPE,
     ATTR_START_DATE, ATTR_END_DATE, ATTR_DAYS_TOTAL, ATTR_DAYS_PREV_MONTH,
     ATTR_DAYS_CURR_MONTH, ATTR_BASE_FEE, ATTR_CORRECTION_FACTOR,
     ATTR_MONTHLY_GAS_USAGE, ATTR_CORRECTED_MONTHLY_USAGE,
@@ -144,9 +144,11 @@ async def async_setup_entry(
     usage_sensor_uid = f"{entry.entry_id}_monthly_gas_usage"
     bill_sensor_uid = f"{entry.entry_id}_total_bill"
     prev_bill_sensor_uid = f"{entry.entry_id}_previous_month_total_bill"
+    pre_prev_bill_sensor_uid = f"{entry.entry_id}_pre_previous_month_total_bill" # 전전월 요금 센서 UID
+    
     estimated_usage_sensor_uid = f"{entry.entry_id}_estimated_monthly_usage"
     estimated_bill_sensor_uid = f"{entry.entry_id}_estimated_total_bill"
-    bimonthly_bill_sensor_uid = f"{entry.entry_id}_bimonthly_bill"
+    periodic_bill_sensor_uid = f"{entry.entry_id}_periodic_bill"
 
     sensors = [
         MonthlyGasUsageSensor(hass, entry, device_info, num_ids.get("start_reading")),
@@ -154,18 +156,20 @@ async def async_setup_entry(
         EstimatedUsageSensor(hass, entry, device_info, num_ids.get("start_reading")),
         EstimatedBillSensor(hass, entry, device_info, num_ids, estimated_usage_sensor_uid),
         PreviousMonthBillSensor(hass, entry, device_info),
+        PrePreviousMonthBillSensor(hass, entry, device_info, prev_bill_sensor_uid),
         LastScrapTimeSensor(coordinator, device_info),
     ]
     
-    if config.get(CONF_BIMONTHLY_CYCLE, "disabled") != "disabled":
-        bimonthly_sensors = [
-            BimonthlyUsageSensor(hass, entry, device_info, usage_sensor_uid, prev_bill_sensor_uid),
-            BimonthlyBillSensor(hass, entry, device_info, bill_sensor_uid, prev_bill_sensor_uid),
-            PreviousBimonthlyBillSensor(hass, entry, device_info, bimonthly_bill_sensor_uid),
-            EstimatedBimonthlyUsageSensor(hass, entry, device_info, estimated_usage_sensor_uid, prev_bill_sensor_uid),
-            EstimatedBimonthlyBillSensor(hass, entry, device_info, estimated_bill_sensor_uid, prev_bill_sensor_uid)
+    reading_cycle = config.get(CONF_READING_CYCLE, "disabled")
+    if reading_cycle != "disabled":
+        periodic_sensors = [
+            PeriodicUsageSensor(hass, entry, device_info, usage_sensor_uid, prev_bill_sensor_uid, pre_prev_bill_sensor_uid),
+            PeriodicBillSensor(hass, entry, device_info, bill_sensor_uid, prev_bill_sensor_uid, pre_prev_bill_sensor_uid),
+            PreviousPeriodicBillSensor(hass, entry, device_info, periodic_bill_sensor_uid),
+            EstimatedPeriodicUsageSensor(hass, entry, device_info, estimated_usage_sensor_uid, prev_bill_sensor_uid, pre_prev_bill_sensor_uid),
+            EstimatedPeriodicBillSensor(hass, entry, device_info, estimated_bill_sensor_uid, prev_bill_sensor_uid, pre_prev_bill_sensor_uid)
         ]
-        sensors.extend(bimonthly_sensors)
+        sensors.extend(periodic_sensors)
         
     async_add_entities(sensors, True)
     
@@ -224,13 +228,39 @@ class TotalBillSensor(SensorEntity):
         self._last_reset_day: date | None = None
         self._attr_extra_state_attributes = {}
         self._attr_native_value = 0
+        
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         entities_to_track = [self._gas_sensor_id] + [eid for eid in self._number_ids.values() if eid is not None]
         self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
+        
+        # 시간 기반 리셋 트리거 (의존성 문제 해결)
+        reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
+        try:
+            target_time = datetime.strptime(reading_time_str, "%H:%M").time()
+        except Exception:
+            target_time = datetime.strptime("00:00", "%H:%M").time()
+            
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass,
+                self._handle_scheduled_reset,
+                hour=target_time.hour,
+                minute=target_time.minute,
+                second=0
+            )
+        )
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+    
+    @callback
+    def _handle_scheduled_reset(self, now: datetime) -> None:
+        """지정된 시간이 되었을 때 리셋 로직을 강제로 실행하는 콜백 함수"""
+        LOGGER.debug("예약된 검침 시간(%s)이 되어 리셋 로직을 확인합니다.", now)
+        self.hass.async_create_task(self._check_and_reset_on_reading_day())
+
     async def async_update(self) -> None: await self._calculate_bill()
 
     async def _check_and_reset_on_reading_day(self) -> None:
@@ -238,15 +268,17 @@ class TotalBillSensor(SensorEntity):
         if not start_reading_id: return
         today = date.today()
         reading_day_config = self._config[CONF_READING_DAY]
-        # 검침시간 확인 (HH:MM)
+        
         reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
         try:
             target_time = datetime.strptime(reading_time_str, "%H:%M").time()
         except Exception:
             target_time = datetime.strptime("00:00", "%H:%M").time()
+            
         now_time = datetime.now().time()
         is_reading_time = (now_time.hour == target_time.hour and now_time.minute == target_time.minute)
         is_reading_day = ((reading_day_config == 0 and today.day == calendar.monthrange(today.year, today.month)[1]) or (reading_day_config != 0 and today.day == reading_day_config))
+        
         if is_reading_day and is_reading_time and self._last_reset_day != today:
             LOGGER.info("검침일이 되어 요금 리셋을 진행합니다.")
             
@@ -463,10 +495,6 @@ class EstimatedBillSensor(SensorEntity):
 
         calculator = GasBillCalculator(reading_day_config)
         
-        # 버그 수정: 계산기의 today 인자로 next_reading_day에서 하루를 뺀 날짜를 전달합니다.
-        # 이렇게 해야 계산기가 전체 청구 기간(예: 10/26 ~ 11/25)을 올바르게 인식합니다.
-        # next_reading_day를 직접 전달하면, 계산기가 시작일을 next_reading_day로 잘못 판단하여
-        # 기간이 1일로 계산되는 문제가 있었습니다.
         calculation_end_date = next_reading_day - timedelta(days=1)
         
         total_fee, attrs = calculator.compute_total_bill_from_usage(
@@ -481,7 +509,7 @@ class EstimatedBillSensor(SensorEntity):
             cooking_heating_boundary=config_inputs.cooking_heating_boundary,
             winter_reduction_fee=config_inputs.winter_reduction_fee,
             non_winter_reduction_fee=config_inputs.non_winter_reduction_fee,
-            today=calculation_end_date, # 수정된 종료일 사용
+            today=calculation_end_date,
             usage_type=self._usage_type,
         )
         self._attr_native_value = total_fee
@@ -555,136 +583,229 @@ class LastScrapTimeSensor(CoordinatorEntity[CityGasDataUpdateCoordinator], Senso
             return self.coordinator.last_update_success_timestamp
         return None
 
-# --- 격월 주기 센서 클래스들 ---
-
-class BimonthlyUsageSensor(SensorEntity):
-    """격월 청구 사이클에 따라 직전월 사용량과 합산한 사용량을 제공합니다."""
+# --- 추가: 전전월 요금 센서 클래스 ---
+class PrePreviousMonthBillSensor(SensorEntity, RestoreEntity):
+    """
+    '전월 요금 센서'의 상태 변화를 감지하여, 
+    전월 요금이 갱신되기 직전의 값(즉, 2달 전 요금)을 저장하는 센서입니다.
+    3개월 검침 주기일 때만 사용됩니다.
+    """
     _attr_has_entity_name = True
-    _attr_translation_key = "bimonthly_usage"
+    _attr_translation_key = "pre_previous_month_total_bill"
+    _attr_native_unit_of_measurement = "KRW"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_icon = "mdi:cash-refund"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, prev_bill_sensor_unique_id: str) -> None:
+        self.hass = hass
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
+        self._attr_device_info = device_info
+        self._prev_bill_sensor_unique_id = prev_bill_sensor_unique_id
+        self._attr_native_value = 0.0
+        self._attr_extra_state_attributes = {}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # 이전 상태 복원
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            try:
+                self._attr_native_value = float(last_state.state)
+                self._attr_extra_state_attributes = last_state.attributes
+            except (ValueError, TypeError):
+                pass
+        
+        # '전월 요금 센서'의 Entity ID 찾기
+        ent_reg = er.async_get(self.hass)
+        prev_bill_entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_bill_sensor_unique_id)
+        
+        if prev_bill_entity_id:
+            # 전월 요금 센서가 변경될 때 호출될 리스너 등록
+            self.async_on_remove(
+                async_track_state_change_event(self.hass, [prev_bill_entity_id], self._handle_prev_bill_change)
+            )
+
+    @callback
+    def _handle_prev_bill_change(self, event: Event) -> None:
+        """
+        전월 요금 센서의 값이 변경되면(새로운 달로 넘어가면),
+        변경 전의 '옛날 값(old_state)'을 가져와서 '전전월 요금'으로 저장합니다.
+        """
+        old_state = event.data.get("old_state")
+        if old_state and old_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            try:
+                self._attr_native_value = float(old_state.state)
+                self._attr_extra_state_attributes = old_state.attributes
+                self.async_write_ha_state()
+                LOGGER.debug("전월 요금 변경 감지: 전전월 요금을 %s 로 업데이트했습니다.", self._attr_native_value)
+            except (ValueError, TypeError):
+                LOGGER.warning("전월 요금 센서의 이전 값을 숫자로 변환할 수 없습니다.")
+
+# --- 정기(격월/3개월) 주기 센서 클래스들 ---
+
+class PeriodicUsageSensor(SensorEntity):
+    """정기 청구 사이클에 따라 사용량을 합산하여 제공합니다."""
+    _attr_has_entity_name = True
+    _attr_translation_key = "periodic_usage"
     _attr_native_unit_of_measurement = "m³"
     _attr_device_class = SensorDeviceClass.GAS
     _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:counter"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, usage_sensor_unique_id: str, prev_bill_sensor_unique_id: str) -> None:
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, usage_uid: str, prev_uid: str, pre_prev_uid: str) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._ent_reg = er.async_get(hass)
-        self._usage_sensor_unique_id = usage_sensor_unique_id
-        self._prev_bill_sensor_unique_id = prev_bill_sensor_unique_id
-        self._usage_sensor_id: str | None = None
-        self._prev_bill_sensor_id: str | None = None
+        self._usage_uid = usage_uid
+        self._prev_uid = prev_uid
+        self._pre_prev_uid = pre_prev_uid # 전전월 센서 UID 추가
+        self._usage_id: str | None = None
+        self._prev_id: str | None = None
+        self._pre_prev_id: str | None = None
         self._attr_native_value = 0.0
         self._attr_extra_state_attributes = {}
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._usage_sensor_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._usage_sensor_unique_id)
-        self._prev_bill_sensor_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_bill_sensor_unique_id)
-        if self._usage_sensor_id and self._prev_bill_sensor_id:
-            self.async_on_remove(async_track_state_change_event(self.hass, [self._usage_sensor_id, self._prev_bill_sensor_id], self._handle_state_change))
+        self._usage_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._usage_uid)
+        self._prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_uid)
+        self._pre_prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._pre_prev_uid)
+        
+        entities_to_track = [eid for eid in [self._usage_id, self._prev_id, self._pre_prev_id] if eid]
+        if entities_to_track:
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
-        if not self._usage_sensor_id or not self._prev_bill_sensor_id: self._attr_native_value = None; return
-        current_usage_state = self.hass.states.get(self._usage_sensor_id)
-        prev_bill_state = self.hass.states.get(self._prev_bill_sensor_id)
+        if not self._usage_id or not self._prev_id: self._attr_native_value = None; return
+        
+        current_state = self.hass.states.get(self._usage_id)
+        prev_state = self.hass.states.get(self._prev_id)
+        pre_prev_state = self.hass.states.get(self._pre_prev_id) if self._pre_prev_id else None
+        
         try:
-            current_usage = float(current_usage_state.state) if current_usage_state and current_usage_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0.0
-            prev_usage = 0.0
-            if prev_bill_state and prev_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                prev_usage = float(prev_bill_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
+            current_val = float(current_state.state) if current_state and current_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0.0
             
-            bimonthly_cycle = self._config.get(CONF_BIMONTHLY_CYCLE)
+            # 사용량은 TotalBillSensor와 달리 센서의 attributes에서 가져와야 할 수도 있습니다.
+            # 여기서는 편의상 전월 요금 센서(PreviousMonthBillSensor)의 속성인 ATTR_MONTHLY_GAS_USAGE를 사용한다고 가정합니다.
+            prev_val = 0.0
+            if prev_state and prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                prev_val = float(prev_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
+            
+            pre_prev_val = 0.0
+            if pre_prev_state and pre_prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                pre_prev_val = float(pre_prev_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
+            
+            reading_cycle = self._config.get(CONF_READING_CYCLE)
             today = date.today()
             
-            is_billing_month = GasBillCalculator.is_billing_month(today, bimonthly_cycle)
-            if is_billing_month:
+            # 합산 로직 호출 (전전월 값 포함)
+            agg = GasBillCalculator.aggregate_periodic(current_val, prev_val, today, reading_cycle, pre_prev_val)
+            self._attr_native_value = round(agg, 2)
+            
+            # 속성 업데이트 (디버깅용)
+            if GasBillCalculator.is_billing_month(today, reading_cycle):
                 self._attr_extra_state_attributes = {
-                    ATTR_USAGE_PREVIOUS_MONTH: prev_usage,
-                    ATTR_USAGE_CURRENT_MONTH: round(current_usage, 2),
+                    "current": current_val,
+                    "previous": prev_val,
+                    "pre_previous": pre_prev_val if reading_cycle.startswith("quarterly") else None
                 }
             else:
                 self._attr_extra_state_attributes = {}
 
-            agg = GasBillCalculator.aggregate_bimonthly(current_usage, prev_usage, today, bimonthly_cycle)
-            self._attr_native_value = round(agg, 2)
         except (ValueError, TypeError): self._attr_native_value = None
 
-class BimonthlyBillSensor(SensorEntity):
-    """격월 청구 사이클에 따라 직전월 요금과 합산한 총 요금을 제공합니다."""
+class PeriodicBillSensor(SensorEntity):
+    """정기 청구 사이클에 따라 요금을 합산하여 제공합니다."""
     _attr_has_entity_name = True
-    _attr_translation_key = "bimonthly_bill"
+    _attr_translation_key = "periodic_bill"
     _attr_native_unit_of_measurement = "KRW"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:cash-multiple"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, bill_sensor_unique_id: str, prev_bill_sensor_unique_id: str) -> None:
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, bill_uid: str, prev_uid: str, pre_prev_uid: str) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._ent_reg = er.async_get(hass)
-        self._bill_sensor_unique_id = bill_sensor_unique_id
-        self._prev_bill_sensor_unique_id = prev_bill_sensor_unique_id
-        self._bill_sensor_id: str | None = None
-        self._prev_bill_sensor_id: str | None = None
+        self._bill_uid = bill_uid
+        self._prev_uid = prev_uid
+        self._pre_prev_uid = pre_prev_uid
+        self._bill_id: str | None = None
+        self._prev_id: str | None = None
+        self._pre_prev_id: str | None = None
         self._attr_native_value = 0
         self._attr_extra_state_attributes = {}
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._bill_sensor_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._bill_sensor_unique_id)
-        self._prev_bill_sensor_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_bill_sensor_unique_id)
-        if self._bill_sensor_id and self._prev_bill_sensor_id:
-            self.async_on_remove(async_track_state_change_event(self.hass, [self._bill_sensor_id, self._prev_bill_sensor_id], self._handle_state_change))
+        self._bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._bill_uid)
+        self._prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_uid)
+        self._pre_prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._pre_prev_uid)
+        
+        entities_to_track = [eid for eid in [self._bill_id, self._prev_id, self._pre_prev_id] if eid]
+        if entities_to_track:
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
-        if not self._bill_sensor_id or not self._prev_bill_sensor_id: self._attr_native_value = None; return
-        current_bill_state = self.hass.states.get(self._bill_sensor_id)
-        prev_bill_state = self.hass.states.get(self._prev_bill_sensor_id)
+        if not self._bill_id or not self._prev_id: self._attr_native_value = None; return
+        
+        curr_state = self.hass.states.get(self._bill_id)
+        prev_state = self.hass.states.get(self._prev_id)
+        pre_prev_state = self.hass.states.get(self._pre_prev_id) if self._pre_prev_id else None
+        
         try:
-            current_bill = float(current_bill_state.state) if current_bill_state and current_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
-            prev_bill = float(prev_bill_state.state) if prev_bill_state and prev_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            curr_val = float(curr_state.state) if curr_state and curr_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            prev_val = float(prev_state.state) if prev_state and prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            pre_prev_val = float(pre_prev_state.state) if pre_prev_state and pre_prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
             
-            bimonthly_cycle = self._config.get(CONF_BIMONTHLY_CYCLE)
+            reading_cycle = self._config.get(CONF_READING_CYCLE)
             today = date.today()
 
-            is_billing_month = GasBillCalculator.is_billing_month(today, bimonthly_cycle)
+            agg = GasBillCalculator.aggregate_periodic(curr_val, prev_val, today, reading_cycle, pre_prev_val)
+            self._attr_native_value = round(agg)
             
-            if is_billing_month:
+            if GasBillCalculator.is_billing_month(today, reading_cycle):
                 self._attr_extra_state_attributes = {
-                    ATTR_PREVIOUS_MONTH: prev_bill_state.attributes if prev_bill_state else {},
-                    ATTR_CURRENT_MONTH: current_bill_state.attributes if current_bill_state else {}
+                    "current": curr_val,
+                    "previous": prev_val,
+                    "pre_previous": pre_prev_val if reading_cycle.startswith("quarterly") else None
                 }
-            elif current_bill_state:
-                self._attr_extra_state_attributes = current_bill_state.attributes
             else:
                 self._attr_extra_state_attributes = {}
 
-            agg = GasBillCalculator.aggregate_bimonthly(current_bill, prev_bill, today, bimonthly_cycle)
-            self._attr_native_value = round(agg)
         except (ValueError, TypeError): self._attr_native_value = None
 
-class PreviousBimonthlyBillSensor(SensorEntity, RestoreEntity):
-    """직전 격월 청구월의 총요금을 저장/복원하는 센서입니다."""
+class PreviousPeriodicBillSensor(SensorEntity, RestoreEntity):
+    """직전 정기 청구월의 총요금을 저장/복원하는 센서입니다."""
     _attr_has_entity_name = True
-    _attr_translation_key = "bimonthly_previous_bill"
+    _attr_translation_key = "periodic_previous_bill"
     _attr_native_unit_of_measurement = "KRW"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:cash-sync"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, bimonthly_bill_unique_id: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, periodic_bill_unique_id: str) -> None:
         self.hass = hass
         self._entry = entry
         self._config = entry.options or entry.data
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._ent_reg = er.async_get(hass)
-        self._bimonthly_bill_unique_id = bimonthly_bill_unique_id
-        self._bimonthly_bill_id: str | None = None
+        self._periodic_bill_unique_id = periodic_bill_unique_id
+        self._periodic_bill_id: str | None = None
         self._attr_native_value = None
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -692,115 +813,136 @@ class PreviousBimonthlyBillSensor(SensorEntity, RestoreEntity):
         if last_state and last_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             try: self._attr_native_value = float(last_state.state)
             except (ValueError, TypeError): self._attr_native_value = None
-        self._bimonthly_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._bimonthly_bill_unique_id)
+        self._periodic_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._periodic_bill_unique_id)
         self.async_on_remove(self.hass.bus.async_listen(f"{EVENT_BILL_RESET}_{self._entry.entry_id}", self._handle_bill_reset_event))
     @callback
     def _handle_bill_reset_event(self, event: Event) -> None:
-        if not self._bimonthly_bill_id: return
-        bimonthly_cycle = self._config.get(CONF_BIMONTHLY_CYCLE)
+        if not self._periodic_bill_id: return
+        reading_cycle = self._config.get(CONF_READING_CYCLE)
         yesterday = date.today() - timedelta(days=1)
-        if GasBillCalculator.is_billing_month(yesterday, bimonthly_cycle):
-            bimonthly_bill_state = self.hass.states.get(self._bimonthly_bill_id)
-            if bimonthly_bill_state and bimonthly_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if GasBillCalculator.is_billing_month(yesterday, reading_cycle):
+            periodic_bill_state = self.hass.states.get(self._periodic_bill_id)
+            if periodic_bill_state and periodic_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
                 try:
-                    self._attr_native_value = round(float(bimonthly_bill_state.state))
+                    self._attr_native_value = round(float(periodic_bill_state.state))
                     self.async_write_ha_state()
-                    LOGGER.debug("직전 격월 총 사용요금을 %s 로 업데이트했습니다.", self._attr_native_value)
-                except (ValueError, TypeError): LOGGER.warning("'격월 총 사용요금' 센서의 값을 읽을 수 없어 업데이트에 실패했습니다.")
+                    LOGGER.debug("직전 정기 총 사용요금을 %s 로 업데이트했습니다.", self._attr_native_value)
+                except (ValueError, TypeError): LOGGER.warning("'정기 총 사용요금' 센서의 값을 읽을 수 없어 업데이트에 실패했습니다.")
 
-class EstimatedBimonthlyUsageSensor(SensorEntity):
-    """월 예상 사용량을 기준으로 격월 예상 사용량(직전월+당월)을 계산합니다."""
+
+class EstimatedPeriodicUsageSensor(SensorEntity):
+    """월 예상 사용량을 기준으로 정기(격월/3개월) 예상 사용량을 계산합니다."""
     _attr_has_entity_name = True
-    _attr_translation_key = "bimonthly_estimated_usage"
+    _attr_translation_key = "periodic_estimated_usage"
     _attr_native_unit_of_measurement = "m³"
     _attr_device_class = SensorDeviceClass.GAS
     _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:chart-box-outline"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, est_usage_unique_id: str, prev_bill_unique_id: str) -> None:
+    
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, est_usage_uid: str, prev_uid: str, pre_prev_uid: str) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._ent_reg = er.async_get(hass)
-        self._est_usage_unique_id = est_usage_unique_id
-        self._prev_bill_unique_id = prev_bill_unique_id
+        self._est_usage_uid = est_usage_uid
+        self._prev_uid = prev_uid
+        self._pre_prev_uid = pre_prev_uid
         self._est_usage_id: str | None = None
-        self._prev_bill_id: str | None = None
+        self._prev_id: str | None = None
+        self._pre_prev_id: str | None = None
         self._attr_native_value = 0.0
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._est_usage_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._est_usage_unique_id)
-        self._prev_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_bill_unique_id)
-        if self._est_usage_id and self._prev_bill_id:
-            self.async_on_remove(async_track_state_change_event(self.hass, [self._est_usage_id, self._prev_bill_id], self._handle_state_change))
+        self._est_usage_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._est_usage_uid)
+        self._prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_uid)
+        self._pre_prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._pre_prev_uid)
+        
+        entities_to_track = [eid for eid in [self._est_usage_id, self._prev_id, self._pre_prev_id] if eid]
+        if entities_to_track:
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
-        if not self._est_usage_id or not self._prev_bill_id: self._attr_native_value = None; return
-        est_usage_state = self.hass.states.get(self._est_usage_id)
-        prev_bill_state = self.hass.states.get(self._prev_bill_id)
+        if not self._est_usage_id or not self._prev_id: self._attr_native_value = None; return
+        
+        est_state = self.hass.states.get(self._est_usage_id)
+        prev_state = self.hass.states.get(self._prev_id)
+        pre_prev_state = self.hass.states.get(self._pre_prev_id) if self._pre_prev_id else None
+        
         try:
-            current_estimated_usage = float(est_usage_state.state) if est_usage_state and est_usage_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0.0
-            prev_actual_usage = 0.0
-            if prev_bill_state and prev_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                prev_actual_usage = float(prev_bill_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
-            bimonthly_cycle = self._config.get(CONF_BIMONTHLY_CYCLE)
+            curr_est = float(est_state.state) if est_state and est_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0.0
+            
+            prev_val = 0.0
+            if prev_state and prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                prev_val = float(prev_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
+            
+            pre_prev_val = 0.0
+            if pre_prev_state and pre_prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                pre_prev_val = float(pre_prev_state.attributes.get(ATTR_MONTHLY_GAS_USAGE, 0.0))
+                
+            reading_cycle = self._config.get(CONF_READING_CYCLE)
             today = date.today()
-            agg = GasBillCalculator.aggregate_bimonthly(current_estimated_usage, prev_actual_usage, today, bimonthly_cycle)
+            agg = GasBillCalculator.aggregate_periodic(curr_est, prev_val, today, reading_cycle, pre_prev_val)
             self._attr_native_value = round(agg, 2)
         except (ValueError, TypeError): self._attr_native_value = None
 
-class EstimatedBimonthlyBillSensor(SensorEntity):
-    """월 예상 요금을 기준으로 격월 예상 요금을 계산합니다."""
+class EstimatedPeriodicBillSensor(SensorEntity):
+    """월 예상 요금을 기준으로 정기(격월/3개월) 예상 요금을 계산합니다."""
     _attr_has_entity_name = True
-    _attr_translation_key = "bimonthly_estimated_bill"
+    _attr_translation_key = "periodic_estimated_bill"
     _attr_native_unit_of_measurement = "KRW"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:cash-clock"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, est_bill_unique_id: str, prev_bill_unique_id: str) -> None:
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, est_bill_uid: str, prev_uid: str, pre_prev_uid: str) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._ent_reg = er.async_get(hass)
-        self._est_bill_unique_id = est_bill_unique_id
-        self._prev_bill_unique_id = prev_bill_unique_id
+        self._est_bill_uid = est_bill_uid
+        self._prev_uid = prev_uid
+        self._pre_prev_uid = pre_prev_uid
         self._est_bill_id: str | None = None
-        self._prev_bill_id: str | None = None
+        self._prev_id: str | None = None
+        self._pre_prev_id: str | None = None
         self._attr_native_value = 0
-        self._attr_extra_state_attributes = {}
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._est_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._est_bill_unique_id)
-        self._prev_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_bill_unique_id)
-        if self._est_bill_id and self._prev_bill_id:
-            self.async_on_remove(async_track_state_change_event(self.hass, [self._est_bill_id, self._prev_bill_id], self._handle_state_change))
+        self._est_bill_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._est_bill_uid)
+        self._prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._prev_uid)
+        self._pre_prev_id = self._ent_reg.async_get_entity_id("sensor", DOMAIN, self._pre_prev_uid)
+        
+        entities_to_track = [eid for eid in [self._est_bill_id, self._prev_id, self._pre_prev_id] if eid]
+        if entities_to_track:
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
-        if not self._est_bill_id or not self._prev_bill_id: self._attr_native_value = None; return
-        est_bill_state = self.hass.states.get(self._est_bill_id)
-        prev_bill_state = self.hass.states.get(self._prev_bill_id)
+        if not self._est_bill_id or not self._prev_id: self._attr_native_value = None; return
+        
+        est_state = self.hass.states.get(self._est_bill_id)
+        prev_state = self.hass.states.get(self._prev_id)
+        pre_prev_state = self.hass.states.get(self._pre_prev_id) if self._pre_prev_id else None
+        
         try:
-            current_estimated_bill = float(est_bill_state.state) if est_bill_state and est_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
-            prev_actual_bill = float(prev_bill_state.state) if prev_bill_state and prev_bill_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            curr_est = float(est_state.state) if est_state and est_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            prev_val = float(prev_state.state) if prev_state and prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
+            pre_prev_val = float(pre_prev_state.state) if pre_prev_state and pre_prev_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else 0
             
-            bimonthly_cycle = self._config.get(CONF_BIMONTHLY_CYCLE)
+            reading_cycle = self._config.get(CONF_READING_CYCLE)
             today = date.today()
 
-            is_billing_month = GasBillCalculator.is_billing_month(today, bimonthly_cycle)
-            
-            if is_billing_month:
-                self._attr_extra_state_attributes = {
-                    ATTR_PREVIOUS_MONTH_ACTUAL: prev_bill_state.attributes if prev_bill_state else {},
-                    ATTR_CURRENT_MONTH_ESTIMATED: est_bill_state.attributes if est_bill_state else {}
-                }
-            else:
-                self._attr_extra_state_attributes = {}
-
-            agg = GasBillCalculator.aggregate_bimonthly(current_estimated_bill, prev_actual_bill, today, bimonthly_cycle)
+            agg = GasBillCalculator.aggregate_periodic(curr_est, prev_val, today, reading_cycle, pre_prev_val)
             self._attr_native_value = round(agg)
         except (ValueError, TypeError): self._attr_native_value = None

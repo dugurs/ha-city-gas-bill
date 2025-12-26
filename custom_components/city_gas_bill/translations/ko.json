@@ -12,7 +12,7 @@
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "일일 정기 검침시간 (HH:MM)",
-          "bimonthly_cycle": "검침 주기"
+          "reading_cycle": "검침 주기"
         }
       }
     },
@@ -35,7 +35,7 @@
           "gas_sensor": "가스 사용량 센서 (m³)",
           "reading_day": "월 정기 검침일 (0 = 말일)",
           "reading_time": "월 정기 검침시간 (HH:MM)",
-          "bimonthly_cycle": "검침 주기"
+          "reading_cycle": "검침 주기"
         }
       }
     },
@@ -56,11 +56,12 @@
       "estimated_total_bill": { "name": "월 예상 요금" },
       "previous_month_total_bill": { "name": "전월 사용 요금" },
       "last_update_time": { "name": "마지막 동기화 성공" },
-      "bimonthly_usage": { "name": "격월 가스 사용량" },
-      "bimonthly_bill": { "name": "격월 사용 요금" },
-      "bimonthly_previous_bill": { "name": "격월 직전 사용 요금" },
-      "bimonthly_estimated_usage": { "name": "격월 예상 사용량" },
-      "bimonthly_estimated_bill": { "name": "격월 예상 요금" }
+      "periodic_usage": { "name": "정기 가스 사용량" },
+      "periodic_bill": { "name": "정기 사용 요금" },
+      "periodic_previous_bill": { "name": "정기 직전 사용 요금" },
+      "pre_previous_month_total_bill": { "name": "정기 전전 사용 요금" },
+      "periodic_estimated_usage": { "name": "정기 예상 사용량" },
+      "periodic_estimated_bill": { "name": "정기 예상 요금" }
     },
     "number": {
       "base_fee": { "name": "기본 요금" },

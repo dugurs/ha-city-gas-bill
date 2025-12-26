@@ -12,7 +12,7 @@
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
-          "bimonthly_cycle": "Billing Cycle"
+          "reading_cycle": "Billing Cycle"
         }
       }
     },
@@ -35,7 +35,7 @@
           "gas_sensor": "Gas Usage Sensor (m³)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
-          "bimonthly_cycle": "Billing Cycle"
+          "reading_cycle": "Billing Cycle"
         }
       }
     },
@@ -56,11 +56,12 @@
       "estimated_total_bill": { "name": "Estimated Total Bill" },
       "previous_month_total_bill": { "name": "Previous Month Total Bill" },
       "last_update_time": { "name": "Last Successful Sync" },
-      "bimonthly_usage": { "name": "Bimonthly Gas Usage" },
-      "bimonthly_bill": { "name": "Bimonthly Total Bill" },
-      "bimonthly_previous_bill": { "name": "Bimonthly Previous Total Bill" },
-      "bimonthly_estimated_usage": { "name": "Bimonthly Estimated Usage" },
-      "bimonthly_estimated_bill": { "name": "Bimonthly Estimated Bill" }
+      "periodic_usage": { "name": "Periodic Gas Usage" },
+      "periodic_bill": { "name": "Periodic Total Bill" },
+      "periodic_previous_bill": { "name": "Periodic Previous Total Bill" },
+      "pre_previous_month_total_bill": { "name": "Periodic Pre-Previous Total Bill" },
+      "periodic_estimated_usage": { "name": "Periodic Estimated Usage" },
+      "periodic_estimated_bill": { "name": "Periodic Estimated Bill" }
     },
     "number": {
       "base_fee": { "name": "Base Fee" },
