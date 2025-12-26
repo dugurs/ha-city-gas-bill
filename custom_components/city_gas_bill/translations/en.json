@@ -10,9 +10,10 @@
           "usage_type": "Usage Type",
           "heating_type": "Heating Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
+          "sensor_resets_monthly": "Use Wallpad Sensor (Resets monthly)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
-          "reading_cycle": "Billing Cycle"
+          "bimonthly_cycle": "Billing Cycle"
         }
       }
     },
@@ -33,9 +34,10 @@
           "usage_type": "Usage Type",
           "heating_type": "Heating Type",
           "gas_sensor": "Gas Usage Sensor (m³)",
+          "sensor_resets_monthly": "Use Wallpad Sensor (Resets monthly)",
           "reading_day": "Monthly Reading Day (0 = Last day)",
           "reading_time": "Daily Reading Time (HH:MM)",
-          "reading_cycle": "Billing Cycle"
+          "bimonthly_cycle": "Billing Cycle"
         }
       }
     },
@@ -55,13 +57,14 @@
       "estimated_monthly_usage": { "name": "Estimated Monthly Usage" },
       "estimated_total_bill": { "name": "Estimated Total Bill" },
       "previous_month_total_bill": { "name": "Previous Month Total Bill" },
+      "pre_previous_month_total_bill": { "name": "Pre-Previous Month Total Bill" },
       "last_update_time": { "name": "Last Successful Sync" },
       "periodic_usage": { "name": "Periodic Gas Usage" },
       "periodic_bill": { "name": "Periodic Total Bill" },
       "periodic_previous_bill": { "name": "Periodic Previous Total Bill" },
-      "pre_previous_month_total_bill": { "name": "Periodic Pre-Previous Total Bill" },
       "periodic_estimated_usage": { "name": "Periodic Estimated Usage" },
-      "periodic_estimated_bill": { "name": "Periodic Estimated Bill" }
+      "periodic_estimated_bill": { "name": "Periodic Estimated Bill" },
+      "virtual_cumulative_gas": { "name": "Virtual Cumulative Gas Usage" }
     },
     "number": {
       "base_fee": { "name": "Base Fee" },

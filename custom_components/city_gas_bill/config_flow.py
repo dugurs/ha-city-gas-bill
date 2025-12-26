@@ -17,7 +17,7 @@ from homeassistant.helpers.selector import SelectOptionDict
 from .const import (
     DOMAIN, CONF_PROVIDER, CONF_PROVIDER_REGION, CONF_GAS_SENSOR,
     CONF_READING_DAY, CONF_READING_TIME, CONF_READING_CYCLE, CONF_HEATING_TYPE,
-    CONF_USAGE_TYPE
+    CONF_USAGE_TYPE, CONF_SENSOR_RESETS_MONTHLY # 추가된 상수
 )
 from .providers import AVAILABLE_PROVIDERS # providers 폴더에서 동적으로 로드된 공급사 목록
 
@@ -45,13 +45,10 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
 
     provider_options = sorted(provider_options, key=lambda item: item["label"])
 
-    # --- 변경: reading_cycle 옵션 ---
     reading_cycle_options = [
         SelectOptionDict(value="disabled", label="매월"),
-        SelectOptionDict(value="odd", label="격월 - 홀수월"),
-        SelectOptionDict(value="even", label="격월 - 짝수월"),
-        SelectOptionDict(value="odd", label="격월 - 홀수월(1,3,5,7,9,11월)"),
-        SelectOptionDict(value="even", label="격월 - 짝수월(2,4,6,8,10,12월)"),
+        SelectOptionDict(value="odd", label="격월 - 홀수월 (1,3,5...)"),
+        SelectOptionDict(value="even", label="격월 - 짝수월 (2,4,6...)"),
         SelectOptionDict(value="quarterly_1", label="3개월 - 1, 4, 7, 10월"),
         SelectOptionDict(value="quarterly_2", label="3개월 - 2, 5, 8, 11월"),
         SelectOptionDict(value="quarterly_3", label="3개월 - 3, 6, 9, 12월"),
@@ -111,6 +108,10 @@ def _get_data_schema(current_config: dict | None = None) -> vol.Schema:
         ): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor", device_class="gas"),
         ),
+        vol.Optional(
+            CONF_SENSOR_RESETS_MONTHLY,
+            default=current_config.get(CONF_SENSOR_RESETS_MONTHLY, False),
+        ): selector.BooleanSelector(),
         vol.Required(
             CONF_READING_DAY,
             default=current_config.get(CONF_READING_DAY, 26),

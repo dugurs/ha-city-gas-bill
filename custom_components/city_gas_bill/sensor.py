@@ -27,6 +27,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from .const import (
     DOMAIN, LOGGER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME,
     EVENT_BILL_RESET, CONF_PROVIDER, CONF_READING_CYCLE, CONF_USAGE_TYPE,
+    CONF_SENSOR_RESETS_MONTHLY, # 추가된 옵션 키
     ATTR_START_DATE, ATTR_END_DATE, ATTR_DAYS_TOTAL, ATTR_DAYS_PREV_MONTH,
     ATTR_DAYS_CURR_MONTH, ATTR_BASE_FEE, ATTR_CORRECTION_FACTOR,
     ATTR_MONTHLY_GAS_USAGE, ATTR_CORRECTED_MONTHLY_USAGE,
@@ -90,7 +91,6 @@ def _get_state_as_float(hass: HomeAssistant, entity_id: str | None) -> float | N
 def _get_bill_config_inputs(hass: HomeAssistant, number_ids: dict) -> BillConfigInputs | None:
     """
     요금 계산에 필요한 모든 Number 엔티티의 상태를 안전하게 가져와 데이터 클래스에 담아 반환합니다.
-    이 함수는 여러 센서에서 재사용됩니다.
     """
     keys = [
         "base_fee", "prev_heat", "curr_heat", "prev_price_cooking", "prev_price_heating",
@@ -140,26 +140,37 @@ async def async_setup_entry(
         "cooking_heating_boundary": ent_reg.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cooking_heating_boundary"),
     }
     
-    # 의존성 주입을 위한 각 센서의 고유 ID 정의
     usage_sensor_uid = f"{entry.entry_id}_monthly_gas_usage"
     bill_sensor_uid = f"{entry.entry_id}_total_bill"
     prev_bill_sensor_uid = f"{entry.entry_id}_previous_month_total_bill"
-    pre_prev_bill_sensor_uid = f"{entry.entry_id}_pre_previous_month_total_bill" # 전전월 요금 센서 UID
+    pre_prev_bill_sensor_uid = f"{entry.entry_id}_pre_previous_month_total_bill"
     
     estimated_usage_sensor_uid = f"{entry.entry_id}_estimated_monthly_usage"
     estimated_bill_sensor_uid = f"{entry.entry_id}_estimated_total_bill"
     periodic_bill_sensor_uid = f"{entry.entry_id}_periodic_bill"
 
+    # --- 추가: 월패드 누적 변환 센서 (설정된 경우) ---
+    virtual_sensor = None
+    if config.get(CONF_SENSOR_RESETS_MONTHLY):
+        # 가상의 누적 센서를 생성하고 목록에 추가합니다.
+        virtual_sensor = WallpadCumulativeSensor(hass, entry, device_info)
+    
+    # 기본 센서 목록
     sensors = [
-        MonthlyGasUsageSensor(hass, entry, device_info, num_ids.get("start_reading")),
-        TotalBillSensor(hass, entry, device_info, num_ids),
-        EstimatedUsageSensor(hass, entry, device_info, num_ids.get("start_reading")),
+        # virtual_sensor가 존재하면 그것을 넘겨줍니다.
+        MonthlyGasUsageSensor(hass, entry, device_info, num_ids.get("start_reading"), virtual_sensor),
+        TotalBillSensor(hass, entry, device_info, num_ids, virtual_sensor),
+        EstimatedUsageSensor(hass, entry, device_info, num_ids.get("start_reading"), virtual_sensor),
         EstimatedBillSensor(hass, entry, device_info, num_ids, estimated_usage_sensor_uid),
         PreviousMonthBillSensor(hass, entry, device_info),
         PrePreviousMonthBillSensor(hass, entry, device_info, prev_bill_sensor_uid),
         LastScrapTimeSensor(coordinator, device_info),
     ]
     
+    if virtual_sensor:
+        sensors.append(virtual_sensor)
+    
+    # 정기(격월/3개월) 센서 추가
     reading_cycle = config.get(CONF_READING_CYCLE, "disabled")
     if reading_cycle != "disabled":
         periodic_sensors = [
@@ -173,6 +184,101 @@ async def async_setup_entry(
         
     async_add_entities(sensors, True)
     
+
+# --- 새로운 센서 클래스: 월패드 누적 변환 센서 ---
+class WallpadCumulativeSensor(SensorEntity, RestoreEntity):
+    """
+    매월 1일 0으로 초기화되는 월패드 센서를 계속 증가하는 누적 값으로 변환하는 가상 센서입니다.
+    """
+    _attr_has_entity_name = True
+    _attr_translation_key = "virtual_cumulative_gas" # 번역키 필요 (ko.json 추가 권장)
+    _attr_native_unit_of_measurement = "m³"
+    _attr_device_class = SensorDeviceClass.GAS
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:counter"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        self.hass = hass
+        self._config = entry.options or entry.data
+        self._raw_sensor_id = self._config[CONF_GAS_SENSOR]
+        self._attr_unique_id = f"{entry.entry_id}_virtual_cumulative_gas"
+        self._attr_device_info = device_info
+        
+        self._attr_native_value = 0.0
+        self._offset = 0.0 # 누적 보정값
+        self._last_raw_value = 0.0 # 직전 센서값
+        
+        # 이 센서의 업데이트를 구독할 외부 콜백 목록
+        self._listeners = []
+
+    def async_add_listener(self, callback_func):
+        """외부 센서(TotalBillSensor 등)가 이 센서의 업데이트를 구독할 수 있게 합니다."""
+        self._listeners.append(callback_func)
+
+    def _notify_listeners(self):
+        """구독자들에게 업데이트를 알립니다."""
+        for callback_func in self._listeners:
+            if callable(callback_func):
+                # 안전하게 실행하기 위해 Task로 예약
+                self.hass.async_create_task(callback_func())
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        
+        # 1. 상태 복원
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            try:
+                self._attr_native_value = float(last_state.state)
+                # 속성에서 offset, last_raw_value 복원
+                self._offset = last_state.attributes.get("accumulated_offset", 0.0)
+                self._last_raw_value = last_state.attributes.get("last_raw_value", 0.0)
+                LOGGER.debug("가상 누적 센서 복원됨: 값=%s, 오프셋=%s, 직전값=%s", 
+                             self._attr_native_value, self._offset, self._last_raw_value)
+            except (ValueError, TypeError):
+                LOGGER.warning("가상 누적 센서의 이전 상태를 복원할 수 없습니다.")
+
+        # 2. 원본 센서 추적
+        self.async_on_remove(
+            async_track_state_change_event(self.hass, [self._raw_sensor_id], self._handle_raw_sensor_change)
+        )
+        self.async_schedule_update_ha_state(force_refresh=True)
+
+    @callback
+    def _handle_raw_sensor_change(self, event: Event) -> None:
+        """원본 센서 값이 변경되면 누적값을 계산합니다."""
+        new_state = event.data.get("new_state")
+        if not new_state or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+
+        try:
+            new_raw_value = float(new_state.state)
+        except (ValueError, TypeError):
+            return
+
+        # 리셋 감지 로직: 값이 줄어들었으면 리셋으로 간주
+        # (작은 노이즈나 오차 방지를 위해 -0.1 이하로 줄어든 경우만 체크할 수도 있지만, 
+        #  월패드는 보통 0으로 확실히 떨어지므로 단순 비교도 괜찮습니다.)
+        if new_raw_value < self._last_raw_value:
+            LOGGER.info("월패드 센서 리셋 감지: %s -> %s. 오프셋을 증가시킵니다.", self._last_raw_value, new_raw_value)
+            # 리셋 직전의 값만큼 오프셋에 더해줍니다.
+            # 예: 100 -> 0 이 되면, 오프셋에 100을 더함.
+            # 그러면 현재 누적값 = 0 + 100 = 100 (유지됨)
+            self._offset += self._last_raw_value
+        
+        # 새로운 누적값 계산
+        self._attr_native_value = new_raw_value + self._offset
+        self._last_raw_value = new_raw_value
+        
+        # 상태 속성 업데이트 (복원용)
+        self._attr_extra_state_attributes = {
+            "accumulated_offset": self._offset,
+            "last_raw_value": self._last_raw_value
+        }
+        
+        self.async_write_ha_state()
+        self._notify_listeners() # 구독자들에게 알림
+
 # --- 기본 월별 센서 클래스들 ---
 
 class MonthlyGasUsageSensor(SensorEntity):
@@ -182,24 +288,44 @@ class MonthlyGasUsageSensor(SensorEntity):
     _attr_native_unit_of_measurement = "m³"
     _attr_device_class = SensorDeviceClass.GAS
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, start_reading_entity_id: str | None) -> None:
+    
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, start_reading_entity_id: str | None, virtual_sensor: WallpadCumulativeSensor | None = None) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._gas_sensor_id = self._config[CONF_GAS_SENSOR]
         self._start_reading_id = start_reading_entity_id
+        self._virtual_sensor = virtual_sensor # 가상 센서 인스턴스
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._attr_native_value = 0.0
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if not self._start_reading_id: return
-        self.async_on_remove(async_track_state_change_event(self.hass, [self._gas_sensor_id, self._start_reading_id], self._handle_state_change))
+        
+        if self._virtual_sensor:
+            # 가상 센서 모드: 가상 센서의 콜백에 등록
+            self._virtual_sensor.async_add_listener(self.async_update_ha_state)
+            # 시작 지침 변경(사용자 수동 수정 등)도 감지해야 함
+            self.async_on_remove(async_track_state_change_event(self.hass, [self._start_reading_id], self._handle_state_change))
+        else:
+            # 일반 모드: 원본 센서와 시작 지침 변경 감지
+            self.async_on_remove(async_track_state_change_event(self.hass, [self._gas_sensor_id, self._start_reading_id], self._handle_state_change))
+            
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
         if not self._start_reading_id: self._attr_native_value = None; return
-        current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+        
+        # 현재 지침 가져오기 (가상 센서 우선)
+        if self._virtual_sensor:
+            current_reading = self._virtual_sensor.native_value
+        else:
+            current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+            
         start_reading = _get_state_as_float(self.hass, self._start_reading_id)
 
         if current_reading is None or start_reading is None:
@@ -216,12 +342,14 @@ class TotalBillSensor(SensorEntity):
     _attr_native_unit_of_measurement = "KRW"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, number_entity_ids: dict) -> None:
+    
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, number_entity_ids: dict, virtual_sensor: WallpadCumulativeSensor | None = None) -> None:
         self.hass = hass
         self._entry = entry
         self._config = entry.options or entry.data
         self._gas_sensor_id = self._config[CONF_GAS_SENSOR]
         self._number_ids = number_entity_ids
+        self._virtual_sensor = virtual_sensor # 가상 센서
         self._usage_type = self._config.get(CONF_USAGE_TYPE, "combined")
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
@@ -231,10 +359,20 @@ class TotalBillSensor(SensorEntity):
         
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        entities_to_track = [self._gas_sensor_id] + [eid for eid in self._number_ids.values() if eid is not None]
-        self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         
-        # 시간 기반 리셋 트리거 (의존성 문제 해결)
+        # 추적할 엔티티 목록 (Number 설정값들)
+        entities_to_track = [eid for eid in self._number_ids.values() if eid is not None]
+        
+        if self._virtual_sensor:
+            # 가상 센서 모드: 가상 센서 콜백 등록 + 설정값 변경 감지
+            self._virtual_sensor.async_add_listener(self.async_update_ha_state)
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
+        else:
+            # 일반 모드: 원본 센서 + 설정값 변경 감지
+            entities_to_track.append(self._gas_sensor_id)
+            self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
+        
+        # 시간 기반 리셋 트리거
         reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
         try:
             target_time = datetime.strptime(reading_time_str, "%H:%M").time()
@@ -257,11 +395,16 @@ class TotalBillSensor(SensorEntity):
     
     @callback
     def _handle_scheduled_reset(self, now: datetime) -> None:
-        """지정된 시간이 되었을 때 리셋 로직을 강제로 실행하는 콜백 함수"""
         LOGGER.debug("예약된 검침 시간(%s)이 되어 리셋 로직을 확인합니다.", now)
         self.hass.async_create_task(self._check_and_reset_on_reading_day())
 
     async def async_update(self) -> None: await self._calculate_bill()
+
+    def _get_current_reading(self) -> float | None:
+        """현재 지침을 가져오는 내부 헬퍼 (가상/실제 분기 처리)"""
+        if self._virtual_sensor:
+            return self._virtual_sensor.native_value
+        return _get_state_as_float(self.hass, self._gas_sensor_id)
 
     async def _check_and_reset_on_reading_day(self) -> None:
         start_reading_id = self._number_ids.get("start_reading")
@@ -286,7 +429,7 @@ class TotalBillSensor(SensorEntity):
             event_attrs = self.extra_state_attributes
 
             config_inputs = _get_bill_config_inputs(self.hass, self._number_ids)
-            current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+            current_reading = self._get_current_reading() # 수정됨
             start_reading = _get_state_as_float(self.hass, self._number_ids.get("start_reading"))
 
             if config_inputs and current_reading is not None and start_reading is not None:
@@ -331,14 +474,10 @@ class TotalBillSensor(SensorEntity):
                     ATTR_CURR_MONTH_COOKING_FEE: attrs_int.get("curr_month_cooking_fee"),
                     ATTR_CURR_MONTH_HEATING_FEE: attrs_int.get("curr_month_heating_fee"),
                 }
-            else:
-                LOGGER.debug("정수 사용량 기반 전월요금 재계산에 실패하여 기존 값을 사용합니다.")
-
+            
             self.hass.bus.async_fire(f"{EVENT_BILL_RESET}_{self._entry.entry_id}", {"state": event_state, "attributes": event_attrs,})
             
             if current_reading is not None and start_reading is not None:
-                # 월검침시작값을 (기존 시작값 + 청구된 정수 사용량)으로 갱신합니다.
-                # 이렇게 해야 청구되지 않은 소수점 이하 사용량이 다음 달로 정확히 이월됩니다.
                 monthly_usage_raw = current_reading - start_reading
                 if monthly_usage_raw < 0: monthly_usage_raw = 0
                 monthly_usage_int = int(monthly_usage_raw)
@@ -352,7 +491,7 @@ class TotalBillSensor(SensorEntity):
         await self._check_and_reset_on_reading_day()
 
         config_inputs = _get_bill_config_inputs(self.hass, self._number_ids)
-        current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+        current_reading = self._get_current_reading() # 수정됨
         start_reading = _get_state_as_float(self.hass, self._number_ids.get("start_reading"))
 
         if config_inputs is None or current_reading is None or start_reading is None:
@@ -408,25 +547,39 @@ class EstimatedUsageSensor(SensorEntity):
     _attr_native_unit_of_measurement = "m³"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:chart-line"
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, start_reading_entity_id: str | None) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, start_reading_entity_id: str | None, virtual_sensor: WallpadCumulativeSensor | None = None) -> None:
         self.hass = hass
         self._config = entry.options or entry.data
         self._gas_sensor_id = self._config[CONF_GAS_SENSOR]
         self._start_reading_id = start_reading_entity_id
+        self._virtual_sensor = virtual_sensor
         self._attr_unique_id = f"{entry.entry_id}_{self.translation_key}"
         self._attr_device_info = device_info
         self._attr_native_value = 0.0
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if not self._start_reading_id: return
-        self.async_on_remove(async_track_state_change_event(self.hass, [self._gas_sensor_id, self._start_reading_id], self._handle_state_change))
+        
+        if self._virtual_sensor:
+            self._virtual_sensor.async_add_listener(self.async_update_ha_state)
+            self.async_on_remove(async_track_state_change_event(self.hass, [self._start_reading_id], self._handle_state_change))
+        else:
+            self.async_on_remove(async_track_state_change_event(self.hass, [self._gas_sensor_id, self._start_reading_id], self._handle_state_change))
+            
         self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _handle_state_change(self, event) -> None: self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
         if not self._start_reading_id: self._attr_native_value = None; return
         
-        current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+        if self._virtual_sensor:
+            current_reading = self._virtual_sensor.native_value
+        else:
+            current_reading = _get_state_as_float(self.hass, self._gas_sensor_id)
+            
         start_reading = _get_state_as_float(self.hass, self._start_reading_id)
 
         if current_reading is None or start_reading is None:

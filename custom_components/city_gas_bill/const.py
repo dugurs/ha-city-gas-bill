@@ -40,6 +40,8 @@ CONF_READING_DAY: Final = "reading_day"    # 월 정기 검침일
 CONF_READING_TIME: Final = "reading_time"  # 일일 정기 검침시간 (HH:MM)
 # --- 변경: CONF_BIMONTHLY_CYCLE -> CONF_READING_CYCLE ---
 CONF_READING_CYCLE: Final = "bimonthly_cycle" # 정기 검침 주기 (매월/홀수월/짝수월) 설정 키입니다.
+# --- 추가: 월패드 센서 사용 여부 (매월 1일 초기화 센서) ---
+CONF_SENSOR_RESETS_MONTHLY: Final = "sensor_resets_monthly" 
 
 # --- 기본값 ---
 
