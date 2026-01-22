@@ -25,8 +25,9 @@ class SeoulGasProvider(GasProvider):
     GasProvider를 상속받아 서울도시가스에 특화된 스크래핑 로직을 구현한 클래스입니다.
     """
     # 데이터를 가져올 웹사이트의 주소를 상수로 정의합니다.
-    URL_HEAT = "https://www.seoulgas.co.kr/front/payment/selectHeat.do"    # 평균열량 조회 페이지
-    URL_PRICE = "https://www.seoulgas.co.kr/front/payment/gasPayTable.do" # 요금표 페이지
+    # 변경: .do 제거 및 ajax 경로로 수정
+    URL_HEAT = "https://www.seoulgas.co.kr/ajax/front/payment/selectHeat"    # 평균열량 조회 페이지
+    URL_PRICE = "https://www.seoulgas.co.kr/ajax/front/payment/gasPayTable" # 요금표 페이지
 
     REGIONS: Final = {"01": "서울", "02": "경기"}
 
@@ -58,14 +59,16 @@ class SeoulGasProvider(GasProvider):
         """
         # BeautifulSoup을 사용하여 HTML을 파싱 가능한 객체로 변환합니다.
         soup = BeautifulSoup(html_content, "html.parser")
+        
         # CSS 선택자를 사용하여 id가 'content'인 div 태그를 찾습니다.
         content_div = soup.select_one("#content")
-        if not content_div:
-            LOGGER.error("%s의 평균열량 데이터를 파싱하기 위한 메인 content div를 찾지 못했습니다.", month_label)
-            return None
         
+        # ajax 응답의 경우 전체 레이아웃 없이 내용만 올 수 있으므로, 
+        # #content가 없으면 soup 전체를 대상으로 검색합니다.
+        target_area = content_div if content_div else soup
+
         # content div 안의 모든 <p> 태그(문단)를 순회합니다.
-        for p_tag in content_div.find_all("p"):
+        for p_tag in target_area.find_all("p"):
             # <p> 태그의 텍스트에 "평균 열량"이라는 문자열이 포함되어 있는지 확인합니다.
             if "평균 열량" in p_tag.get_text():
                 # 정규식을 사용하여 텍스트에서 소수점 형태의 숫자(예: "42.507")를 찾습니다.
@@ -74,7 +77,7 @@ class SeoulGasProvider(GasProvider):
                     # 숫자를 찾았다면, 첫 번째 그룹(숫자 부분)을 반환합니다.
                     return match.group(1)
                     
-        LOGGER.error("%s의 평균열량 데이터를 파싱하지 못했습니다.", month_label)
+        LOGGER.error("%s의 평균열량 데이터를 파싱하지 못했습니다. 응답 내용 일부: %s", month_label, html_content[:100])
         return None
 
     async def scrape_heat_data(self) -> dict[str, float] | None:
@@ -88,16 +91,16 @@ class SeoulGasProvider(GasProvider):
 
         try:
             # --- 당월 평균열량 조회 ---
-            # POST 요청에 필요한 파라미터 (조회 기간)
+            # 변경: POST -> GET, data -> params
             params_curr = {"startDate": first_day_curr_month.strftime("%Y.%m.%d"), "endDate": today.strftime("%Y.%m.%d")}
-            async with self.websession.post(self.URL_HEAT, data=params_curr) as response:
+            async with self.websession.get(self.URL_HEAT, params=params_curr) as response:
                 response.raise_for_status() # HTTP 상태 코드가 200이 아니면 오류 발생
                 # 응답받은 HTML을 헬퍼 함수에 넘겨 숫자 값을 추출합니다.
                 curr_heat_str = self._parse_heat_from_html(await response.text(), "current month")
 
             # --- 전월 평균열량 조회 ---
             params_prev = {"startDate": first_day_prev_month.strftime("%Y.%m.%d"), "endDate": last_day_prev_month.strftime("%Y.%m.%d")}
-            async with self.websession.post(self.URL_HEAT, data=params_prev) as response:
+            async with self.websession.get(self.URL_HEAT, params=params_prev) as response:
                 response.raise_for_status()
                 prev_heat_str = self._parse_heat_from_html(await response.text(), "previous month")
 
@@ -125,7 +128,8 @@ class SeoulGasProvider(GasProvider):
             payload = {"gaspayArea": self.region}
             LOGGER.debug("서울도시가스 열량단가 조회 요청 (지역: %s), Payload: %s", self.region, payload)
             
-            async with self.websession.post(self.URL_PRICE, data=payload) as response:
+            # 변경: POST -> GET, data -> params
+            async with self.websession.get(self.URL_PRICE, params=payload) as response:
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
                 
@@ -184,19 +188,19 @@ class SeoulGasProvider(GasProvider):
             LOGGER.error("서울도시가스 공급사에 지역 코드가 설정되지 않아 기본요금을 조회할 수 없습니다.")
             return None
         try:
-            # 지역 코드를 포함하여 POST 요청을 보냅니다.
+            # 지역 코드를 포함하여 GET 요청을 보냅니다.
+            # 변경: POST -> GET, data -> params
             payload = {"gaspayArea": self.region}
-            async with self.websession.post(self.URL_PRICE, data=payload) as response:
+            async with self.websession.get(self.URL_PRICE, params=payload) as response:
                 response.raise_for_status()
                 soup = BeautifulSoup(await response.text(), "html.parser")
                 
                 content_div = soup.select_one("#content")
                 if not content_div:
-                    LOGGER.error("서울도시가스 기본요금 스크래핑을 위한 #content 영역을 찾지 못했습니다.")
-                    return None
-                
+                    # ajax 응답에서 바로 내용이 올 경우를 대비
+                    content_div = soup
+
                 # #content 영역 내의 모든 li 태그를 순회하며 '주택용 기본요금' 텍스트를 찾습니다.
-                # 이 방식은 웹사이트 구조가 일부 변경되어도 더 안정적으로 작동합니다.
                 base_fee_text = None
                 for item in content_div.find_all("li"):
                     if "주택용 기본요금" in item.get_text():

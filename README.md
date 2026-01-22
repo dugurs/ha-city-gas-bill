@@ -39,7 +39,6 @@
 | `koone_gas` | 코원에너지서비스 (SK E&S) | 서울, 경기 | ❌ |
 | `busan_gas` | 부산도시가스 (SK E&S) | 부산 | ✅ |
 | `kiturami_gas` | 귀뚜라미에너지 | 서울 | ❌ |
-| `samchully_gas` | 삼천리 도시가스 | 경기, 인천 | ✅ |
 | `daeryun_ens` | 대륜이엔에스 | 서울, 경기 | ❌ |
 | `chungbuk_gas` | 참빛충북도시가스 | 충북 | ✅ |
 | `miraen_seohae_energy` | 미래엔서해에너지 | 충남 | ✅ |

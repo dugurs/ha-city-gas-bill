@@ -55,12 +55,12 @@ from city_gas_bill.providers.miraen_seohae_energy import MiraenSeoHaeEnergyProvi
 
 # --- 여기에 테스트할 공급사와 설정을 추가하거나 주석 처리하여 관리합니다. ---
 PROVIDERS_TO_TEST = [
-    # {
-    #     "name": "서울도시가스",
-    #     "class": SeoulGasProvider,
-    #     "region": "01",
-    #     "heating_type": "residential",
-    # },
+    {
+        "name": "서울도시가스",
+        "class": SeoulGasProvider,
+        "region": "01",
+        "heating_type": "residential",
+    },
     # {
     #     "name": "인천도시가스 (인천)",
     #     "class": IncheonGasProvider,
@@ -158,18 +158,18 @@ PROVIDERS_TO_TEST = [
     #     "heating_type": "central_cogeneration", # 중앙난방(공동열전용)
     # },
     # --- START: 추가된 테스트 케이스 ---
-    {
-        "name": "미래엔서해에너지 (주택난방)",
-        "class": MiraenSeoHaeEnergyProvider,
-        "region": "chungnam",
-        "heating_type": "residential",
-    },
-    {
-        "name": "미래엔서해에너지 (중앙난방)",
-        "class": MiraenSeoHaeEnergyProvider,
-        "region": "chungnam",
-        "heating_type": "central_cogeneration",
-    },
+    # {
+    #     "name": "미래엔서해에너지 (주택난방)",
+    #     "class": MiraenSeoHaeEnergyProvider,
+    #     "region": "chungnam",
+    #     "heating_type": "residential",
+    # },
+    # {
+    #     "name": "미래엔서해에너지 (중앙난방)",
+    #     "class": MiraenSeoHaeEnergyProvider,
+    #     "region": "chungnam",
+    #     "heating_type": "central_cogeneration",
+    # },
     # --- END: 추가된 테스트 케이스 ---
 ]
 # ---
