@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 
 from .const import DOMAIN, DEFAULT_BASE_FEE, CONF_GAS_SENSOR, LOGGER
 from .providers import AVAILABLE_PROVIDERS
@@ -58,6 +58,7 @@ class RestorableNumberEntity(NumberEntity, RestoreEntity):
     """
     _attr_has_entity_name = True # 기기 이름을 제외한 엔티티 고유 이름만 사용
     _attr_mode = NumberMode.BOX # UI에서 슬라이더 대신 입력 상자 형태로 표시
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry: ConfigEntry, device_info: DeviceInfo, default_value: float) -> None:
         """Number 엔티티를 초기화합니다."""

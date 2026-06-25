@@ -22,7 +22,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 
 from .const import (
     DOMAIN, LOGGER, CONF_GAS_SENSOR, CONF_READING_DAY, CONF_READING_TIME,
@@ -726,6 +726,7 @@ class LastScrapTimeSensor(CoordinatorEntity[CityGasDataUpdateCoordinator], Senso
     _attr_translation_key = "last_update_time"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:cloud-check-variant"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     def __init__(self, coordinator: CityGasDataUpdateCoordinator, device_info: DeviceInfo) -> None:
         super().__init__(coordinator)
         self._attr_device_info = device_info

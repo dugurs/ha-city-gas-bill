@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.const import EntityCategory
 
 from .const import DOMAIN, LOGGER, CONF_PROVIDER
 from .providers import AVAILABLE_PROVIDERS
@@ -53,6 +54,7 @@ class UpdatePriceDataButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "update_price_data" # 번역 키 변경
     _attr_icon = "mdi:currency-krw" # 아이콘 변경
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
@@ -85,6 +87,7 @@ class UpdateHeatDataButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "update_heat_data" # 새로운 번역 키
     _attr_icon = "mdi:fire-alert" # 새로운 아이콘
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
@@ -116,6 +119,7 @@ class UpdateBaseFeeButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "update_base_fee" # 번역 키
     _attr_icon = "mdi:cash-sync" # 아이콘
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
