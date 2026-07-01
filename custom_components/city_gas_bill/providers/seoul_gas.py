@@ -85,6 +85,9 @@ class SeoulGasProvider(GasProvider):
         서울도시가스 웹사이트에서 전월 및 당월의 평균열량 데이터를 스크래핑합니다.
         """
         today = date.today()
+        # 조회일이 1일인 경우 당일 평균열량이 아직 등록되지 않으므로 전일(어제)을 기준으로 조회 기간을 설정합니다.
+        if today.day == 1:
+            today = today - timedelta(days=1)
         first_day_curr_month = today.replace(day=1) # 이번 달 1일
         last_day_prev_month = first_day_curr_month - timedelta(days=1) # 지난달 말일
         first_day_prev_month = last_day_prev_month.replace(day=1) # 지난달 1일

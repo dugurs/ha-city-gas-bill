@@ -9,6 +9,7 @@ import asyncio
 import aiohttp
 import logging
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -41,13 +42,10 @@ from city_gas_bill.providers.yesco_gas import YescoGasProvider
 from city_gas_bill.providers.koone_gas import KooneGasProvider
 from city_gas_bill.providers.busan_gas import BusanGasProvider
 from city_gas_bill.providers.kiturami_gas import KituramiGasProvider
-from city_gas_bill.providers.samchully_gas import SamchullyGasProvider
 from city_gas_bill.providers.daeryun_ens import DaeryunENSProvider
 from city_gas_bill.providers.chungbuk_gas import ChungbukGasProvider
 from city_gas_bill.providers.chungcheong_gas import ChungcheongGasProvider
-# --- START: 추가된 코드 ---
 from city_gas_bill.providers.miraen_seohae_energy import MiraenSeoHaeEnergyProvider
-# --- END: 추가된 코드 ---
 
 
 # --- 설정 끝 ---
@@ -61,116 +59,96 @@ PROVIDERS_TO_TEST = [
         "region": "01",
         "heating_type": "residential",
     },
-    # {
-    #     "name": "인천도시가스 (인천)",
-    #     "class": IncheonGasProvider,
-    #     "region": "1",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "인천도시가스 (경기, 중앙난방)",
-    #     "class": IncheonGasProvider,
-    #     "region": "2",
-    #     "heating_type": "central",
-    # },
-    # {
-    #     "name": "예스코",
-    #     "class": YescoGasProvider,
-    #     "region": "1",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "코원에너지서비스 (서울)",
-    #     "class": KooneGasProvider,
-    #     "region": "274",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "코원에너지서비스 (경기)",
-    #     "class": KooneGasProvider,
-    #     "region": "275", 
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "부산도시가스 (주택난방)",
-    #     "class": BusanGasProvider,
-    #     "region": "276",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "부산도시가스 (중앙난방)",
-    #     "class": BusanGasProvider,
-    #     "region": "276",
-    #     "heating_type": "central",
-    # },
-    # {
-    #     "name": "귀뚜라미에너지",
-    #     "class": KituramiGasProvider,
-    #     "region": "seoul",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (경기, 주택난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0001",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (인천, 주택난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0002",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "삼천리 도시가스 (경기, 중앙난방)",
-    #     "class": SamchullyGasProvider,
-    #     "region": "0001",
-    #     "heating_type": "central",
-    # },
-    # {
-    #     "name": "대륜이엔에스",
-    #     "class": DaeryunENSProvider,
-    #     "region": "seoul",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "참빛충북도시가스 (주택난방)",
-    #     "class": ChungbukGasProvider,
-    #     "region": "chungbuk",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "참빛충북도시가스 (중앙난방)",
-    #     "class": ChungbukGasProvider,
-    #     "region": "chungbuk",
-    #     "heating_type": "central",
-    # },
-    # {
-    #     "name": "충청에너지서비스 (주택난방)",
-    #     "class": ChungcheongGasProvider,
-    #     "region": "279", # 충청 지역 코드
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "충청에너지서비스 (중앙난방)",
-    #     "class": ChungcheongGasProvider,
-    #     "region": "279", # 충청 지역 코드
-    #     "heating_type": "central_cogeneration", # 중앙난방(공동열전용)
-    # },
-    # --- START: 추가된 테스트 케이스 ---
-    # {
-    #     "name": "미래엔서해에너지 (주택난방)",
-    #     "class": MiraenSeoHaeEnergyProvider,
-    #     "region": "chungnam",
-    #     "heating_type": "residential",
-    # },
-    # {
-    #     "name": "미래엔서해에너지 (중앙난방)",
-    #     "class": MiraenSeoHaeEnergyProvider,
-    #     "region": "chungnam",
-    #     "heating_type": "central_cogeneration",
-    # },
-    # --- END: 추가된 테스트 케이스 ---
+    {
+        "name": "인천도시가스 (인천)",
+        "class": IncheonGasProvider,
+        "region": "1",
+        "heating_type": "residential",
+    },
+    {
+        "name": "인천도시가스 (경기, 중앙난방)",
+        "class": IncheonGasProvider,
+        "region": "2",
+        "heating_type": "central",
+    },
+    {
+        "name": "예스코",
+        "class": YescoGasProvider,
+        "region": "1",
+        "heating_type": "residential",
+    },
+    {
+        "name": "코원에너지서비스 (서울)",
+        "class": KooneGasProvider,
+        "region": "274",
+        "heating_type": "residential",
+    },
+    {
+        "name": "코원에너지서비스 (경기)",
+        "class": KooneGasProvider,
+        "region": "275", 
+        "heating_type": "residential",
+    },
+    {
+        "name": "부산도시가스 (주택난방)",
+        "class": BusanGasProvider,
+        "region": "276",
+        "heating_type": "residential",
+    },
+    {
+        "name": "부산도시가스 (중앙난방)",
+        "class": BusanGasProvider,
+        "region": "276",
+        "heating_type": "central",
+    },
+    {
+        "name": "귀뚜라미에너지",
+        "class": KituramiGasProvider,
+        "region": "seoul",
+        "heating_type": "residential",
+    },
+    {
+        "name": "대륜이엔에스",
+        "class": DaeryunENSProvider,
+        "region": "seoul",
+        "heating_type": "residential",
+    },
+    {
+        "name": "참빛충북도시가스 (주택난방)",
+        "class": ChungbukGasProvider,
+        "region": "chungbuk",
+        "heating_type": "residential",
+    },
+    {
+        "name": "참빛충북도시가스 (중앙난방)",
+        "class": ChungbukGasProvider,
+        "region": "chungbuk",
+        "heating_type": "central",
+    },
+    {
+        "name": "충청에너지서비스 (주택난방)",
+        "class": ChungcheongGasProvider,
+        "region": "279", # 충청 지역 코드
+        "heating_type": "residential",
+    },
+    {
+        "name": "충청에너지서비스 (중앙난방)",
+        "class": ChungcheongGasProvider,
+        "region": "279", # 충청 지역 코드
+        "heating_type": "central_cogeneration", # 중앙난방(공동열전용)
+    },
+    {
+        "name": "미래엔서해에너지 (주택난방)",
+        "class": MiraenSeoHaeEnergyProvider,
+        "region": "chungnam",
+        "heating_type": "residential",
+    },
+    {
+        "name": "미래엔서해에너지 (중앙난방)",
+        "class": MiraenSeoHaeEnergyProvider,
+        "region": "chungnam",
+        "heating_type": "central_cogeneration",
+    },
 ]
 # ---
 
@@ -239,7 +217,16 @@ async def main():
         level=logging.INFO, # DEBUG로 변경하면 더 상세한 로그를 볼 수 있습니다.
         format='%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'
     )
+    
+    today = date.today()
+    first_day_curr_month = today.replace(day=1)
+    last_day_prev_month = first_day_curr_month - timedelta(days=1)
+    first_day_prev_month = last_day_prev_month.replace(day=1)
+
     logging.info("모든 도시가스 공급사 프로바이더 로컬 테스트를 시작합니다.")
+    logging.info(f"📅 [조회 기준일] 오늘: {today.strftime('%Y-%m-%d')}")
+    logging.info(f"📅 [당월 조회범위] {first_day_curr_month.strftime('%Y-%m-%d')} ~ {today.strftime('%Y-%m-%d')}")
+    logging.info(f"📅 [전월 조회범위] {first_day_prev_month.strftime('%Y-%m-%d')} ~ {last_day_prev_month.strftime('%Y-%m-%d')}\n")
 
     connector = aiohttp.TCPConnector(ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
