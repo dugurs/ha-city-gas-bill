@@ -234,25 +234,25 @@ class SeoulGasProvider(GasProvider):
                 # ajax 응답에서 바로 내용이 올 경우를 대비
                 content_div = soup
 
-                # #content 영역 내의 모든 li 태그를 순회하며 '주택용 기본요금' 텍스트를 찾습니다.
-                base_fee_text = None
-                for item in content_div.find_all("li"):
-                    if "주택용 기본요금" in item.get_text():
-                        base_fee_text = item.get_text(strip=True)
-                        break
-                
-                if not base_fee_text:
-                    LOGGER.error("기본요금 정보가 포함된 텍스트('주택용 기본요금')를 찾지 못했습니다.")
-                    return None
-
-                # 정규식을 사용하여 텍스트에서 숫자(콤마 포함)를 추출합니다.
-                match = re.search(r"([\d,]+)\s*원", base_fee_text)
-                if match:
-                    base_fee_str = match.group(1).replace(",", "")
-                    return float(base_fee_str)
-
-                LOGGER.error("기본요금 텍스트('%s')에서 요금 숫자를 추출하지 못했습니다.", base_fee_text)
+            # #content 영역 내의 모든 li 태그를 순회하며 '주택용 기본요금' 텍스트를 찾습니다.
+            base_fee_text = None
+            for item in content_div.find_all("li"):
+                if "주택용 기본요금" in item.get_text():
+                    base_fee_text = item.get_text(strip=True)
+                    break
+            
+            if not base_fee_text:
+                LOGGER.error("기본요금 정보가 포함된 텍스트('주택용 기본요금')를 찾지 못했습니다.")
                 return None
+
+            # 정규식을 사용하여 텍스트에서 숫자(콤마 포함)를 추출합니다.
+            match = re.search(r"([\d,]+)\s*원", base_fee_text)
+            if match:
+                base_fee_str = match.group(1).replace(",", "")
+                return float(base_fee_str)
+
+            LOGGER.error("기본요금 텍스트('%s')에서 요금 숫자를 추출하지 못했습니다.", base_fee_text)
+            return None
         
         except (ValueError, TypeError) as e:
             LOGGER.error("서울도시가스 기본요금 파싱 중 값 변환 오류 발생: %s", e)

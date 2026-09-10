@@ -7,9 +7,12 @@ City Gas Bill 통합구성요소의 센서(Sensor) 플랫폼 파일입니다.
 from __future__ import annotations
 from datetime import date, timedelta, datetime
 import calendar
+import asyncio
 from typing import NamedTuple
 
 from dateutil.relativedelta import relativedelta
+
+from homeassistant.util import dt as dt_util
 
 from homeassistant.components.sensor import (
     SensorDeviceClass, SensorEntity, SensorStateClass
@@ -219,8 +222,12 @@ class WallpadCumulativeSensor(SensorEntity, RestoreEntity):
         """구독자들에게 업데이트를 알립니다."""
         for callback_func in self._listeners:
             if callable(callback_func):
-                # 안전하게 실행하기 위해 Task로 예약
-                self.hass.async_create_task(callback_func())
+                try:
+                    res = callback_func()
+                    if asyncio.iscoroutine(res):
+                        self.hass.async_create_task(res)
+                except Exception as err:
+                    LOGGER.error("리스너 콜백 실행 중 오류 발생: %s", err)
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -287,7 +294,7 @@ class MonthlyGasUsageSensor(SensorEntity):
     _attr_translation_key = "monthly_gas_usage"
     _attr_native_unit_of_measurement = "m³"
     _attr_device_class = SensorDeviceClass.GAS
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo, start_reading_entity_id: str | None, virtual_sensor: WallpadCumulativeSensor | None = None) -> None:
         self.hass = hass
@@ -335,7 +342,7 @@ class MonthlyGasUsageSensor(SensorEntity):
         usage = current_reading - start_reading
         self._attr_native_value = round(usage, 2) if usage >= 0 else 0
 
-class TotalBillSensor(SensorEntity):
+class TotalBillSensor(SensorEntity, RestoreEntity):
     """현재까지의 총 가스 요금을 계산하여 보여주는 핵심 센서입니다."""
     _attr_has_entity_name = True
     _attr_translation_key = "total_bill"
@@ -359,6 +366,16 @@ class TotalBillSensor(SensorEntity):
         
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+        
+        # 이전 상태에서 마지막 리셋 날짜 복원
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.attributes:
+            last_reset_str = last_state.attributes.get("last_reset_date")
+            if last_reset_str:
+                try:
+                    self._last_reset_day = date.fromisoformat(last_reset_str)
+                except (ValueError, TypeError):
+                    pass
         
         # 추적할 엔티티 목록 (Number 설정값들)
         entities_to_track = [eid for eid in self._number_ids.values() if eid is not None]
@@ -409,7 +426,8 @@ class TotalBillSensor(SensorEntity):
     async def _check_and_reset_on_reading_day(self) -> None:
         start_reading_id = self._number_ids.get("start_reading")
         if not start_reading_id: return
-        today = date.today()
+        now = dt_util.now()
+        today = now.date()
         reading_day_config = self._config[CONF_READING_DAY]
         
         reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
@@ -418,8 +436,8 @@ class TotalBillSensor(SensorEntity):
         except Exception:
             target_time = datetime.strptime("00:00", "%H:%M").time()
             
-        now_time = datetime.now().time()
-        is_reading_time = (now_time.hour == target_time.hour and now_time.minute == target_time.minute)
+        now_time = now.time()
+        is_reading_time = (now_time >= target_time)
         is_reading_day = ((reading_day_config == 0 and today.day == calendar.monthrange(today.year, today.month)[1]) or (reading_day_config != 0 and today.day == reading_day_config))
         
         if is_reading_day and is_reading_time and self._last_reset_day != today:
@@ -538,6 +556,7 @@ class TotalBillSensor(SensorEntity):
             ATTR_PREV_MONTH_HEATING_FEE: attrs.get("prev_month_heating_fee"),
             ATTR_CURR_MONTH_COOKING_FEE: attrs.get("curr_month_cooking_fee"),
             ATTR_CURR_MONTH_HEATING_FEE: attrs.get("curr_month_heating_fee"),
+            "last_reset_date": self._last_reset_day.isoformat() if self._last_reset_day else None,
         }
 
 class EstimatedUsageSensor(SensorEntity):

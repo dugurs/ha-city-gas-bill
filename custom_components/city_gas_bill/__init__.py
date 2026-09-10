@@ -204,6 +204,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # 3초 후에 함수를 실행하여 엔티티가 생성될 시간을 확보합니다.
         async_call_later(hass, 3, _scrape_initial_values)
 
+    async def handle_update_all_data_service(call: ServiceCall) -> None:
+        """사용자가 '전체 데이터 갱신' 서비스를 호출했을 때 실행됩니다."""
+        LOGGER.info("서비스 호출로 전체 데이터(열량단가/평균열량) 업데이트를 시작합니다.")
+        coord = hass.data[DOMAIN].get(entry.entry_id, {}).get("coordinator")
+        if coord:
+            await coord.async_refresh()
+
     async def handle_update_price_service(call: ServiceCall) -> None:
         """사용자가 '열량단가 갱신' 서비스를 호출했을 때 실행됩니다."""
         LOGGER.info("서비스 호출로 열량단가 업데이트를 시작합니다.")
@@ -217,11 +224,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await coordinator.async_update_heat_data()
             
     # 새로운 서비스들을 Home Assistant에 등록합니다.
+    hass.services.async_register(DOMAIN, "update_data", handle_update_all_data_service)
     hass.services.async_register(DOMAIN, "update_price_data", handle_update_price_service)
     hass.services.async_register(DOMAIN, "update_heat_data", handle_update_heat_service)
     
     # 통합구성요소가 제거될 때 등록했던 서비스도 함께 제거되도록 합니다.
     def remove_services():
+        hass.services.async_remove(DOMAIN, "update_data")
         hass.services.async_remove(DOMAIN, "update_price_data")
         hass.services.async_remove(DOMAIN, "update_heat_data")
         

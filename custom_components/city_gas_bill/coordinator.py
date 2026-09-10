@@ -4,7 +4,7 @@
 City Gas Bill 통합구성요소의 DataUpdateCoordinator를 정의하는 파일입니다.
 """
 from __future__ import annotations
-import async_timeout  # 비동기 작업의 시간 초과를 처리하기 위한 라이브러리
+import asyncio  # 비동기 작업 및 타임아웃 처리를 위한 표준 라이브러리
 import aiohttp  # 비동기 HTTP 요청을 위한 라이브러리
 
 from homeassistant.core import HomeAssistant
@@ -75,34 +75,73 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
             self.last_update_success_timestamp = dt_util.utcnow() # 성공 시간만 현재로 기록
             return {}  # 빈 데이터를 반환하여 기존 값을 덮어쓰지 않도록 함
 
+        heat_data = None
+        price_data = None
+        failed_items = []
+
         try:
             # 네트워크 요청이 60초 이상 걸리면 시간 초과 오류를 발생시킵니다.
-            async with async_timeout.timeout(60):
-                # 선택된 공급사의 스크래핑 메소드를 비동기적으로 호출합니다.
-                heat_data = await self.provider.scrape_heat_data()  # 평균열량 데이터
-                price_data = await self.provider.scrape_price_data()  # 열량단가 데이터
+            async with asyncio.timeout(60):
+                # 1. 평균열량 데이터 스크래핑 시도
+                try:
+                    heat_data = await self.provider.scrape_heat_data()
+                except Exception as err:
+                    LOGGER.warning("%s 평균열량 스크래핑 중 오류 발생: %s", self.provider.name, err)
 
-                # None인 경우에만 실패로 간주하고, 빈 딕셔너리는 '업데이트할 값 없음'으로 정상 처리합니다.
-                if heat_data is None or price_data is None:
-                    failed_items = []
-                    if heat_data is None: failed_items.append("평균열량")
-                    if price_data is None: failed_items.append("열량단가")
+                # 2. 열량단가 데이터 스크래핑 시도
+                try:
+                    price_data = await self.provider.scrape_price_data()
+                except Exception as err:
+                    LOGGER.warning("%s 열량단가 스크래핑 중 오류 발생: %s", self.provider.name, err)
+
+                if heat_data is None:
+                    failed_items.append("평균열량")
+                if price_data is None:
+                    failed_items.append("열량단가")
+
+                # 두 항목 모두 실패한 경우
+                if heat_data is None and price_data is None:
+                    if self.data:
+                        LOGGER.warning(
+                            "%s로부터 모든 데이터를 가져오지 못했습니다. 기존 복원 데이터를 유지합니다.",
+                            self.provider.name,
+                        )
+                        return self.data
                     raise UpdateFailed(
                         f"{self.provider.name}로부터 필수 데이터({', '.join(failed_items)})를 가져오지 못했습니다."
                     )
 
-                # 데이터 가져오기에 성공하면, 성공 시간을 기록합니다.
+                # 부분 실패 발생 시 경고 로그 기록 후 성공한 데이터 반영
+                if failed_items:
+                    LOGGER.warning(
+                        "%s로부터 일부 데이터(%s)를 가져오지 못했습니다. 기존 값을 유지합니다.",
+                        self.provider.name,
+                        ", ".join(failed_items),
+                    )
+
+                # 성공한 데이터 병합
                 self.last_update_success_timestamp = dt_util.utcnow()
-                
-                # 가져온 두 종류의 데이터를 하나의 딕셔너리로 합쳐서 반환합니다.
-                # 이 반환된 값이 self.data에 저장되어 센서들이 사용하게 됩니다.
-                return {**heat_data, **price_data}
+                merged_data = dict(self.data) if self.data else {}
+                if heat_data:
+                    merged_data.update(heat_data)
+                if price_data:
+                    merged_data.update(price_data)
+
+                return merged_data
 
         # 웹 통신 중 발생할 수 있는 네트워크 관련 오류를 처리합니다.
         except aiohttp.ClientError as err:
+            if self.data:
+                LOGGER.warning("%s와 통신 중 오류가 발생하여 기존 데이터를 유지합니다: %s", self.provider.name, err)
+                return self.data
             raise UpdateFailed(f"{self.provider.name}와 통신 중 오류가 발생했습니다: {err}")
+        except UpdateFailed:
+            raise
         # 그 외 예상치 못한 모든 종류의 오류를 처리합니다.
         except Exception as err:
+            if self.data:
+                LOGGER.warning("%s에서 예기치 않은 오류가 발생하여 기존 데이터를 유지합니다: %s", self.provider.name, err)
+                return self.data
             raise UpdateFailed(f"{self.provider.name}에서 예기치 않은 오류가 발생했습니다: {err}")
 
     async def async_update_price_data(self) -> None:
@@ -113,17 +152,18 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
 
         LOGGER.info("%s 공급사로부터 열량단가 데이터 업데이트를 시작합니다.", self.provider.name)
         try:
-            async with async_timeout.timeout(60):
+            async with asyncio.timeout(60):
                 price_data = await self.provider.scrape_price_data()
                 if price_data is None:
-                    raise UpdateFailed(f"{self.provider.name}로부터 열량단가 데이터를 가져오지 못했습니다.")
+                    LOGGER.warning("%s로부터 열량단가 데이터를 가져오지 못했습니다. 기존 값을 유지합니다.", self.provider.name)
+                    return
 
                 self.last_update_success_timestamp = dt_util.utcnow()
-                # 기존 데이터에 새로운 열량단가 데이터를 덮어씁니다.
-                new_data = {**self.data, **price_data}
-                self.async_set_updated_data(new_data)
+                merged_data = dict(self.data) if self.data else {}
+                merged_data.update(price_data)
+                self.async_set_updated_data(merged_data)
         except Exception as err:
-            raise UpdateFailed(f"{self.provider.name}에서 열량단가 업데이트 중 오류 발생: {err}")
+            LOGGER.warning("%s에서 열량단가 업데이트 중 오류 발생(기존 값 유지): %s", self.provider.name, err)
 
     async def async_update_heat_data(self) -> None:
         """평균열량 데이터만 선택적으로 업데이트합니다."""
@@ -133,14 +173,15 @@ class CityGasDataUpdateCoordinator(DataUpdateCoordinator):
 
         LOGGER.info("%s 공급사로부터 평균열량 데이터 업데이트를 시작합니다.", self.provider.name)
         try:
-            async with async_timeout.timeout(60):
+            async with asyncio.timeout(60):
                 heat_data = await self.provider.scrape_heat_data()
                 if heat_data is None:
-                    raise UpdateFailed(f"{self.provider.name}로부터 평균열량 데이터를 가져오지 못했습니다.")
+                    LOGGER.warning("%s로부터 평균열량 데이터를 가져오지 못했습니다. 기존 값을 유지합니다.", self.provider.name)
+                    return
 
                 self.last_update_success_timestamp = dt_util.utcnow()
-                # 기존 데이터에 새로운 평균열량 데이터를 덮어씁니다.
-                new_data = {**self.data, **heat_data}
-                self.async_set_updated_data(new_data)
+                merged_data = dict(self.data) if self.data else {}
+                merged_data.update(heat_data)
+                self.async_set_updated_data(merged_data)
         except Exception as err:
-            raise UpdateFailed(f"{self.provider.name}에서 평균열량 업데이트 중 오류 발생: {err}")
+            LOGGER.warning("%s에서 평균열량 업데이트 중 오류 발생(기존 값 유지): %s", self.provider.name, err)
