@@ -5,7 +5,7 @@ City Gas Bill 통합구성요소의 센서(Sensor) 플랫폼 파일입니다.
 실제 가스 요금 계산 로직과 다양한 정보(사용량, 예상요금 등)를 제공하는 센서들을 정의합니다.
 """
 from __future__ import annotations
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, time
 import calendar
 import asyncio
 from typing import NamedTuple
@@ -62,6 +62,17 @@ def _get_next_reading_date(start_date: date, reading_day: int) -> date:
     if reading_day == 0:
         return next_month.replace(day=calendar.monthrange(next_month.year, next_month.month)[1])
     return next_month.replace(day=reading_day)
+
+def _parse_reading_time(time_str: str | None) -> time:
+    """검침시간 문자열(HH:MM 또는 HH:MM:SS)을 안전하게 파싱하여 time 객체로 반환합니다."""
+    if not time_str:
+        return datetime.strptime("00:00", "%H:%M").time()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(str(time_str).strip(), fmt).time()
+        except (ValueError, TypeError):
+            continue
+    return datetime.strptime("00:00", "%H:%M").time()
 
 # --- START: 재사용을 위한 헬퍼 함수 및 데이터 클래스 ---
 
@@ -390,11 +401,7 @@ class TotalBillSensor(SensorEntity, RestoreEntity):
             self.async_on_remove(async_track_state_change_event(self.hass, entities_to_track, self._handle_state_change))
         
         # 시간 기반 리셋 트리거
-        reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
-        try:
-            target_time = datetime.strptime(reading_time_str, "%H:%M").time()
-        except Exception:
-            target_time = datetime.strptime("00:00", "%H:%M").time()
+        target_time = _parse_reading_time(self._config.get(CONF_READING_TIME, "00:00"))
             
         self.async_on_remove(
             async_track_time_change(
@@ -430,11 +437,7 @@ class TotalBillSensor(SensorEntity, RestoreEntity):
         today = now.date()
         reading_day_config = self._config[CONF_READING_DAY]
         
-        reading_time_str = self._config.get(CONF_READING_TIME, "00:00")
-        try:
-            target_time = datetime.strptime(reading_time_str, "%H:%M").time()
-        except Exception:
-            target_time = datetime.strptime("00:00", "%H:%M").time()
+        target_time = _parse_reading_time(self._config.get(CONF_READING_TIME, "00:00"))
             
         now_time = now.time()
         is_reading_time = (now_time >= target_time)
